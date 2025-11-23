@@ -381,12 +381,18 @@ function activate(context) {
             }).join(', ');
             const repl = `${candidate.exprText}({ ${props} })`;
 
-            // prefer an already-visible editor showing the candidate file (do not switch or reveal)
+            // open the candidate file and show it
             const visibleEditors = vscode.window.visibleTextEditors || [];
             let targetEditor = visibleEditors.find(e => e.document && e.document.fileName === candidate.filePath);
             if (!targetEditor) {
-              const activeEditor = vscode.window.activeTextEditor || originalEditor;
-              if (activeEditor && activeEditor.document && activeEditor.document.fileName === candidate.filePath) targetEditor = activeEditor;
+              try {
+                const docToOpen = await vscode.workspace.openTextDocument(candidate.filePath);
+                targetEditor = await vscode.window.showTextDocument(docToOpen, {preview: true});
+              } catch (e) {
+                // fallback to active editor if opening fails
+                const activeEditor = vscode.window.activeTextEditor || originalEditor;
+                if (activeEditor && activeEditor.document && activeEditor.document.fileName === candidate.filePath) targetEditor = activeEditor;
+              }
             }
 
             if (targetEditor) {
@@ -415,9 +421,9 @@ function activate(context) {
               try {targetEditor.selections = priorSelections;} catch (e) { }
               try {if (priorVisibleRanges && priorVisibleRanges.length) targetEditor.revealRange(priorVisibleRanges[0], vscode.TextEditorRevealType.Default);} catch (e) { }
             } else {
-              // candidate is not visible in any open editor; avoid switching — show a small non-blocking preview message
+              // If we still don't have an editor (unexpected), show a small non-blocking preview message
               const previewText = repl;
-              vscode.window.showInformationMessage(`Preview (no switch): ${previewText}`);
+              vscode.window.showInformationMessage(`Preview: ${previewText}`);
             }
           }
         } catch (e) {
