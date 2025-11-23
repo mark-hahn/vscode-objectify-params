@@ -116,7 +116,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       }
     }
 
-    const transformFunctionText = (fnText: string, paramNames: string[], objectParamName: string, paramTypeText: string) => {
+    const transformFunctionText = (fnText: string, paramNames: string[], objectParamName: string, paramTypeText: string, isTypeScript: boolean) => {
       const open = fnText.indexOf('(');
       if (open < 0) return fnText;
       let i = open + 1;
@@ -130,7 +130,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       const close = i - 1;
       const before = fnText.slice(0, open + 1);
       const after = fnText.slice(close);
-      const newParams = `{ ${paramNames.join(', ')} }: ${paramTypeText}`;
+      const newParams = isTypeScript 
+        ? `{ ${paramNames.join(', ')} }: ${paramTypeText}`
+        : `{ ${paramNames.join(', ')} }`;
       const newFn = before + newParams + after;
       return newFn;
     };
@@ -342,11 +344,12 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         try { return p.getType().getText(); } catch (e) { return 'any'; }
       });
       const paramTypeText = `{ ${paramNames.map((n, i) => `${n}: ${paramTypes[i] || 'any'}`).join('; ')} }`;
+      const isTypeScript = sourceFile.getFilePath().endsWith('.ts') || sourceFile.getFilePath().endsWith('.tsx');
       try {
         const uri = vscode.Uri.file(sourceFile.getFilePath());
         const doc = await vscode.workspace.openTextDocument(uri);
         const full = doc.getText();
-        const newFnText = transformFunctionText(originalFunctionText, paramNames, objectParamName, paramTypeText);
+        const newFnText = transformFunctionText(originalFunctionText, paramNames, objectParamName, paramTypeText, isTypeScript);
         const idx = full.indexOf(originalFunctionText);
         const startPosReplace = idx >= 0 ? doc.positionAt(idx) : doc.positionAt(targetStart);
         const endPosReplace = idx >= 0 ? doc.positionAt(idx + originalFunctionText.length) : doc.positionAt(targetEnd);
@@ -522,10 +525,11 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       try { return p.getType().getText(); } catch (e) { return 'any'; }
     });
     const paramTypeText2 = `{ ${paramNames.map((n, i) => `${n}: ${paramTypes2[i] || 'any'}`).join('; ')} }`;
+    const isTypeScript2 = sourceFile.getFilePath().endsWith('.ts') || sourceFile.getFilePath().endsWith('.tsx');
     try {
       const uri2 = vscode.Uri.file(sourceFile.getFilePath());
       const doc2 = await vscode.workspace.openTextDocument(uri2);
-      const newFnText2 = transformFunctionText(originalFunctionText, paramNames, objectParamName, paramTypeText2);
+      const newFnText2 = transformFunctionText(originalFunctionText, paramNames, objectParamName, paramTypeText2, isTypeScript2);
       const full2 = doc2.getText();
       const idx2 = full2.indexOf(originalFunctionText);
       const startReplace2 = idx2 >= 0 ? doc2.positionAt(idx2) : doc2.positionAt(targetStart);

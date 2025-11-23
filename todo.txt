@@ -1,7 +1,7 @@
 bugs...
   vue screwed up: Not on a function.
 
-  added types to js file
+  fixed types to js file
 
   should have better explantion: Cannot process: found call resolved to a different symbol in c:/Users/mark/apps/test2/out/extension.js
 
