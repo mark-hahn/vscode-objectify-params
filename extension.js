@@ -311,7 +311,7 @@ function activate(context) {
         }
         // restore editor
         if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, {selection: originalSelection, preserveFocus: false});
-        vscode.window.showInformationMessage('Converted parameters to single object and updated confirmed call sites.');
+        vscode.window.showInformationMessage(`Converted ${confirmed.length} call(s) and updated function.`);
         return;
       }
 
@@ -412,8 +412,8 @@ function activate(context) {
               const callRange = new vscode.Range(startPos, doc.positionAt(candidate.start + repl.length));
               targetEditor.setDecorations(highlightDecoration, [callRange]);
 
-              // wait 0.5s
-              await new Promise(r => setTimeout(r, 500));
+              // wait 5s
+              await new Promise(r => setTimeout(r, 5000));
 
               // undo the temporary call edit and restore selections/visible ranges
               await vscode.commands.executeCommand('undo');
@@ -508,7 +508,7 @@ function activate(context) {
 
       // restore original editor and cursor
       if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, {selection: originalSelection, preserveFocus: false});
-      vscode.window.showInformationMessage('Completed refactor and applied changes.');
+      vscode.window.showInformationMessage(`Converted ${confirmed.length + fuzzy.length} call(s) and updated function.`);
     } catch (err) {
       console.error(err);
       vscode.window.showErrorMessage('An error occurred: ' + (err.message || err));
