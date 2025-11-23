@@ -1,0 +1,49 @@
+{
+  "name": "params-to-object",
+  "displayName": "Params-to-Object",
+  "description": "Simple VS Code extension that logs hello world on activation.",
+  "version": "0.0.1",
+  "publisher": "mark",
+  "engines": {
+    "vscode": "^1.50.0"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "paramsToObject.convert",
+        "title": "Convert params to object"
+      },
+      {
+        "command": "paramsToObject.checkFunctions",
+        "title": "Check functions for reliable refactor"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Params to Object",
+      "properties": {
+        "paramsToObject.include": {
+          "type": "string",
+          "default": "**/*.ts **/*.js",
+          "description": "Space-separated glob patterns of files to include when scanning (use common glob format)."
+        },
+        "paramsToObject.exclude": {
+          "type": "string",
+          "default": "**/node_modules/**",
+          "description": "Space-separated glob patterns of files/folders to exclude when scanning."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "glob": "^13.0.0",
+    "ts-morph": "^18.0.0"
+  },
+  "scripts": {
+    "vscode:prepublish": "echo prepublish"
+  }
+}
