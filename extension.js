@@ -32,8 +32,7 @@ function activate(context) {
         tsConfigFilePath: undefined,
         compilerOptions: {
           allowJs: true,
-          checkJs: false,
-          moduleResolution: 'node'
+          checkJs: false
         }
       });
 
@@ -545,8 +544,7 @@ function activate(context) {
         tsConfigFilePath: undefined,
         compilerOptions: {
           allowJs: true,
-          checkJs: false,
-          moduleResolution: 'node'
+          checkJs: false
         }
       });
       const glob = require('glob');
