@@ -1,8 +1,34 @@
 import * as vscode from 'vscode';
-import * as utils  from './utils';
-const { log, start, end } = getLog('cmds');
 
 const outputChannel = vscode.window.createOutputChannel('objectifyParams');
+
+export interface WorkspaceContext {
+  editor: vscode.TextEditor;
+  workspaceRoot: string;
+  filePath: string;
+}
+
+export function getWorkspaceContext(): WorkspaceContext | null {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    void vscode.window.showErrorMessage('No editor file open.');
+    return null;
+  }
+
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders || workspaceFolders.length === 0) {
+    void vscode.window.showErrorMessage('No workspace folder open.');
+    return null;
+  }
+
+  const filePath = editor.document.fileName;
+  const containingFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+  const workspaceRoot = containingFolder
+    ? containingFolder.uri.fsPath
+    : workspaceFolders[0].uri.fsPath;
+
+  return { editor, workspaceRoot, filePath };
+}
 
 export function getLog(module: string) : {
   log:   (...args: any[]) => void;
@@ -15,24 +41,24 @@ export function getLog(module: string) : {
     const startTime = Date.now();
     timers[name] = startTime;
     if (hide) return;
-    const line = `[ext:${module}] ${name} started${msg ? ', ' + msg : ''}`;
+    const line = `[objpar:${module}] ${name} started${msg ? ', ' + msg : ''}`;
     outputChannel.appendLine(line);
-    log(line);
+    console.log(line);
   };
 
   const end = function (name: string, onlySlow = false, msg = ''): void {
     if (!timers[name]) {
-      const line = `[ext:${module}] ${name} ended${msg ? ', ' + msg : ''}`;
+      const line = `[objpar:${module}] ${name} ended${msg ? ', ' + msg : ''}`;
       outputChannel.appendLine(line);
-      log(line);
+      console.log(line);
       return;
     }
     const endTime = Date.now();
     const duration = endTime - timers[name];
     if (onlySlow && duration < 100) return;
-    const line = `[ext:${module}] ${name} ended, ${duration}ms${msg ? ', ' + msg : ''}`;
+    const line = `[objpar:${module}] ${name} ended, ${duration}ms${msg ? ', ' + msg : ''}`;
     outputChannel.appendLine(line);
-    log(line);
+    console.log(line);
   };
 
   const log = function (...args: any[]): void {
@@ -67,16 +93,16 @@ export function getLog(module: string) : {
       } else return a;
     });
 
-    const line = (nomodFlag ? '' : '[ext:' + module + '] ') +
+    const line = (nomodFlag ? '' : '[objpar:' + module + '] ') +
                  (errFlag ? ' error, ' : '') +
                  (errMsg !== undefined ? errMsg : '') +
                  par.join(' ');
 
-    const infoLine = par.join('Data Scope: ').replace('parse: ','');
+    const infoLine = par.join('Objectify Params: ').replace('parse: ','');
 
     outputChannel.appendLine(line);
     if (errFlag) console.error(line);
-    else log(line);
+    else console.log(line);
     if (infoFlag) void vscode.window.showInformationMessage(infoLine);
   };
 

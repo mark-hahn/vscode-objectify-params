@@ -1,31 +1,18 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { Project, SyntaxKind } from 'ts-morph';
+import { SyntaxKind } from 'ts-morph';
 import glob from 'glob';
 import * as fs from 'fs';
-import * as utils  from './utils';
-const { log, start, end } = utils.getLog('cmds');
+import * as utils from './utils';
+import * as parse from './parse';
+
+const { log } = utils.getLog('cmds');
 
 export async function convertCommandHandler(...args: any[]): Promise<void> {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    void vscode.window.showErrorMessage(
-      'Open a file and place the cursor inside a function.'
-    );
-    return;
-  }
+  const context = utils.getWorkspaceContext();
+  if (!context) return;
 
-  const workspaceFolders = vscode.workspace.workspaceFolders;
-  if (!workspaceFolders || workspaceFolders.length === 0) {
-    void vscode.window.showErrorMessage('Open a workspace folder first.');
-    return;
-  }
-
-  const filePath = editor.document.fileName;
-  const containingFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
-  const workspaceRoot = containingFolder
-    ? containingFolder.uri.fsPath
-    : workspaceFolders[0].uri.fsPath;
+  const { editor, workspaceRoot, filePath } = context;
   log('activeFile:', filePath);
   log('chosen workspaceRoot:', workspaceRoot);
 
@@ -34,45 +21,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
   const cursorOffset = editor.document.offsetAt(editor.selection.active);
 
   try {
-    const project = new Project({
-      tsConfigFilePath: undefined,
-      compilerOptions: { allowJs: true, checkJs: false },
-    });
-
-    // Read include/exclude globs from configuration (space-separated strings)
-    const cfg = vscode.workspace.getConfiguration('objectifyParams');
-    const includeStr = (cfg.get('include') as string) || '**/*.ts **/*.js';
-    const excludeStr = (cfg.get('exclude') as string) || '**/node_modules/**';
-    const includePatterns = includeStr.split(/\s+/).filter(Boolean);
-    const excludePatterns = excludeStr.split(/\s+/).filter(Boolean);
-
-    // Use VS Code's workspace.findFiles to respect glob include/exclude settings
-    const foundSet = new Set<string>();
-    const excludeGlob = excludePatterns.length > 0 ? (excludePatterns.length === 1 ? excludePatterns[0] : `{${excludePatterns.join(',')}}`) : undefined;
-    for (const p of includePatterns) {
-      try {
-        const rel = new vscode.RelativePattern(workspaceRoot, p);
-        const uris = await vscode.workspace.findFiles(rel, excludeGlob);
-        for (const u of uris) foundSet.add(u.fsPath);
-      } catch (e) {
-        // ignore pattern errors for individual include patterns
-      }
-    }
-    const jsTsFiles = Array.from(foundSet);
-    log('workspaceRoot:', workspaceRoot);
-    log('includePatterns:', includePatterns, 'excludePatterns:', excludePatterns, 'found files:', jsTsFiles.length);
-    if (jsTsFiles.length > 0) {
-      project.addSourceFilesAtPaths(jsTsFiles);
-    } else {
-      // Fallback: glob returned nothing (dev-host or config quirks). Add common JS/TS globs directly
-      const fallbackGlob = path.join(workspaceRoot, '**/*.{js,ts,jsx,tsx,mjs,cjs}');
-      log('glob found no files; adding fallback project glob:', fallbackGlob);
-      try {
-        project.addSourceFilesAtPaths(fallbackGlob);
-      } catch (e) {
-        log('fallback addSourceFilesAtPaths failed', e);
-      }
-    }
+    const project = await parse.createProjectFromConfig(workspaceRoot);
 
     // Ensure current file is in the project
     let sourceFile = project.getSourceFile(filePath);
@@ -227,6 +176,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     }
 
     // Also search .vue files in workspace for template calls (simple textual search)
+    const cfg = vscode.workspace.getConfiguration('objectifyParams');
+    const excludeStr = (cfg.get('exclude') as string) || '**/node_modules/**';
+    const excludePatterns = excludeStr.split(/\s+/).filter(Boolean);
     const vuePatterns = ['**/*.vue'];
     let vueFilesRel: string[] = [];
     for (const p of vuePatterns) {
