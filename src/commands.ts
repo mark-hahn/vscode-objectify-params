@@ -3,8 +3,10 @@ import * as path from 'path';
 import { Project, SyntaxKind } from 'ts-morph';
 import glob from 'glob';
 import * as fs from 'fs';
+import * as utils  from './utils';
+const { log, start, end } = utils.getLog('cmds');
 
-export async function convertCommandHandler(..._args: any[]): Promise<void> {
+export async function convertCommandHandler(...args: any[]): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     void vscode.window.showErrorMessage(
