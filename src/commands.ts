@@ -44,17 +44,19 @@ export async function convertCommandHandler(..._args: any[]): Promise<void> {
     const includePatterns = includeStr.split(/\s+/).filter(Boolean);
     const excludePatterns = excludeStr.split(/\s+/).filter(Boolean);
 
-    let jsTsFilesRel: string[] = [];
+    // Use VS Code's workspace.findFiles to respect glob include/exclude settings
+    const foundSet = new Set<string>();
+    const excludeGlob = excludePatterns.length > 0 ? (excludePatterns.length === 1 ? excludePatterns[0] : `{${excludePatterns.join(',')}}`) : undefined;
     for (const p of includePatterns) {
       try {
-        const found = glob.sync(p, { cwd: workspaceRoot, ignore: excludePatterns, nodir: true });
-        jsTsFilesRel = jsTsFilesRel.concat(found);
+        const rel = new vscode.RelativePattern(workspaceRoot, p);
+        const uris = await vscode.workspace.findFiles(rel, excludeGlob);
+        for (const u of uris) foundSet.add(u.fsPath);
       } catch (e) {
-        // ignore pattern errors
+        // ignore pattern errors for individual include patterns
       }
     }
-    jsTsFilesRel = Array.from(new Set(jsTsFilesRel));
-    const jsTsFiles = jsTsFilesRel.map((f) => path.join(workspaceRoot, f));
+    const jsTsFiles = Array.from(foundSet);
     console.log('[params-to-object] workspaceRoot:', workspaceRoot);
     console.log('[params-to-object] includePatterns:', includePatterns, 'excludePatterns:', excludePatterns, 'found files:', jsTsFiles.length);
     if (jsTsFiles.length > 0) {
