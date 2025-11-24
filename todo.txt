@@ -2,7 +2,6 @@ bugs...
 
 todo ...
   add detailed explanations to the dialog
-  test arrow-functions
 
 params
   default

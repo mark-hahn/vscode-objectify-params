@@ -159,9 +159,22 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       const close = i - 1;
       const before = fnText.slice(0, open + 1);
       const after = fnText.slice(close);
+      
+      // Build destructured params with defaults preserved
+      const paramsWithDefaults = params.map((p: any) => {
+        const name = p.getName();
+        const hasDefault = p.hasInitializer && p.hasInitializer();
+        if (hasDefault) {
+          const initializer = p.getInitializer();
+          const defaultValue = initializer ? initializer.getText() : undefined;
+          return defaultValue ? `${name} = ${defaultValue}` : name;
+        }
+        return name;
+      }).join(', ');
+      
       const newParams = isTypeScript 
-        ? `{ ${paramNames.join(', ')} }: ${paramTypeText}`
-        : `{ ${paramNames.join(', ')} }`;
+        ? `{ ${paramsWithDefaults} }: ${paramTypeText}`
+        : `{ ${paramsWithDefaults} }`;
       const newFn = before + newParams + after;
       return newFn;
     };
