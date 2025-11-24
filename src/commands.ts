@@ -268,6 +268,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
     const confirmed: any[] = [];
     let fuzzy: any[] = [];
+    let scanCallIndex = 0;
+    let totalScannedCalls = 0;
 
     const files = project.getSourceFiles();
     log('scanning', files.length, 'source files (node_modules excluded where possible)');
@@ -433,56 +435,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
                 }
               }
             } else if (isCollision) {
-              // Show name collision warning
-              const conflictFile = sf.getFilePath();
-              log('Name collision detected in', conflictFile);
-              
-              try {
-                const doc = await vscode.workspace.openTextDocument(conflictFile);
-                const callStartPos = doc.positionAt(call.getStart());
-                const callEndPos = doc.positionAt(call.getEnd());
-                
-                await vscode.window.showTextDocument(doc, { preview: true });
-                const tempEditor = vscode.window.activeTextEditor;
-                
-                if (tempEditor) {
-                  const topLine = Math.max(0, callStartPos.line - 5);
-                  const topPos = new vscode.Position(topLine, 0);
-                  tempEditor.revealRange(new vscode.Range(topPos, topPos), vscode.TextEditorRevealType.AtTop);
-                  
-                  const highlightDecoration = vscode.window.createTextEditorDecorationType({ 
-                    backgroundColor: 'rgba(255,100,100,0.3)',
-                    border: '1px solid rgba(255,100,100,0.8)'
-                  });
-                  tempEditor.setDecorations(highlightDecoration, [new vscode.Range(callStartPos, callEndPos)]);
-                  
-                  const choice = await vscode.window.showWarningMessage(
-                    `⚠️ Name collision detected\n\nFound a call to "${fnName}" in:\n${conflictFile}\n\nThis call resolves to a different function than the one you're converting. This often happens when:\n• Scanning compiled JavaScript output\n• Multiple functions share the same name\n• Import aliases create ambiguity\n\nThis call will be ignored.`,
-                    { modal: true },
-                    'Continue Scanning',
-                    'Cancel Scanning'
-                  );
-                  
-                  highlightDecoration.dispose();
-                  
-                  // Restore original editor
-                  if (originalEditor) {
-                    await vscode.window.showTextDocument(originalEditor.document, { 
-                      selection: originalSelection, 
-                      preserveFocus: false 
-                    });
-                  }
-                  
-                  if (choice === 'Cancel Scanning') {
-                    log('User cancelled scanning due to name collision');
-                    return;
-                  }
-                }
-              } catch (e) {
-                log('Error showing collision warning', e);
-              }
-              
-              // Continue scanning instead of breaking
+              // Store name collision for later processing
+              fuzzy.push({ filePath: sf.getFilePath(), start: call.getStart(), end: call.getEnd(), exprText: expr.getText(), argsText: [], reason: 'name-collision', score: 1 });
               continue;
             }
           } catch (e) {
@@ -708,7 +662,65 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     fuzzy.sort((a, b) => (b.score || 0) - (a.score || 0));
 
     const highlightDecoration = vscode.window.createTextEditorDecorationType({ backgroundColor: 'rgba(255,255,0,0.4)' });
+    const totalCalls = confirmed.length + fuzzy.length;
+    const totalFuzzy = fuzzy.length;
+    let callIdx = confirmed.length; // Start after confirmed calls
     for (const candidate of fuzzy) {
+      callIdx++;
+      
+      // Handle name collisions
+      if (candidate.reason === 'name-collision') {
+        const conflictFile = candidate.filePath;
+        log('Name collision detected in', conflictFile);
+        
+        try {
+          const doc = await vscode.workspace.openTextDocument(conflictFile);
+          const callStartPos = doc.positionAt(candidate.start);
+          const callEndPos = doc.positionAt(candidate.end);
+          
+          await vscode.window.showTextDocument(doc, { preview: true });
+          const tempEditor = vscode.window.activeTextEditor;
+          
+          if (tempEditor) {
+            const topLine = Math.max(0, callStartPos.line - 5);
+            const topPos = new vscode.Position(topLine, 0);
+            tempEditor.revealRange(new vscode.Range(topPos, topPos), vscode.TextEditorRevealType.AtTop);
+            
+            const collisionDecoration = vscode.window.createTextEditorDecorationType({ 
+              backgroundColor: 'rgba(255,100,100,0.3)',
+              border: '1px solid rgba(255,100,100,0.8)'
+            });
+            tempEditor.setDecorations(collisionDecoration, [new vscode.Range(callStartPos, callEndPos)]);
+            
+            const choice = await vscode.window.showWarningMessage(
+              `Processing function call ${callIdx} of ${totalCalls}.\n\n⚠️ Name collision detected\n\nFound a call to "${fnName}" in:\n${conflictFile}\n\nThis call resolves to a different function than the one you're converting. This often happens when:\n• Scanning compiled JavaScript output\n• Multiple functions share the same name\n• Import aliases create ambiguity\n\nThis call will be ignored.`,
+              { modal: true },
+              'Continue Scanning',
+              'Cancel Scanning'
+            );
+            
+            collisionDecoration.dispose();
+            
+            // Restore original editor
+            if (originalEditor) {
+              await vscode.window.showTextDocument(originalEditor.document, { 
+                selection: originalSelection, 
+                preserveFocus: false 
+              });
+            }
+            
+            if (choice === 'Cancel Scanning') {
+              log('User cancelled scanning due to name collision');
+              highlightDecoration.dispose();
+              return;
+            }
+          }
+        } catch (e) {
+          log('Error showing collision warning', e);
+        }
+        
+        continue;
+      }
       let doc: vscode.TextDocument | undefined;
       let startPos: vscode.Position | undefined;
       let endPos: vscode.Position | undefined;
@@ -745,6 +757,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       let choice: string | undefined;
       if (willLoseArgs) {
         choice = await vscode.window.showWarningMessage(
+          `Processing function call ${callIdx} of ${totalCalls}.\n\n` +
           `⚠️ Argument count mismatch\n\n` +
           `This call has ${argCount} argument(s) but the function has ${paramNames.length} parameter(s).\n\n` +
           `Converting would lose ${argCount - paramNames.length} argument(s):\n` +
@@ -768,7 +781,12 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         // Skip this call and continue to next fuzzy
         continue;
       } else {
-        choice = await vscode.window.showInformationMessage(`Is this call a valid invocation of ${fnName}?`, { modal: true }, 'Valid', 'Invalid');
+        choice = await vscode.window.showInformationMessage(
+          `Processing function call ${callIdx} of ${totalCalls}.\n\nIs this call a valid invocation of ${fnName}?`,
+          { modal: true },
+          'Valid',
+          'Invalid'
+        );
         if (choice !== 'Valid') {
           const currentEditor = vscode.window.activeTextEditor;
           if (currentEditor) currentEditor.setDecorations(highlightDecoration, []);
