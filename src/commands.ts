@@ -100,11 +100,12 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
     if (hasParameterProperties) {
       await vscode.window.showWarningMessage(
-        `Objectify Params\n\n⚠️ This function cannot be converted\n\n` +
+        `Objectify Params\n\n❌ This function cannot be converted\n\n` +
         `This function uses TypeScript parameter properties (public/private/protected/readonly).\n\n` +
         `Converting would lose the automatic property assignment behavior.\n\n` +
         `Parameter properties are only valid in constructors and automatically create class fields.`,
-        { modal: true }
+        { modal: true },
+        'OK'
       );
       return;
     }
@@ -113,12 +114,13 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     const hasOverloads = targetFunction.getOverloads && targetFunction.getOverloads().length > 0;
     if (hasOverloads) {
       await vscode.window.showWarningMessage(
-        `Objectify Params\n\n⚠️ This function cannot be converted\n\n` +
+        `Objectify Params\n\n❌ This function cannot be converted\n\n` +
         `This function uses TypeScript overload signatures.\n\n` +
         `Converting the implementation signature would break the overload signatures, ` +
         `which would need to be manually updated to match the new object parameter pattern.\n\n` +
         `All overload signatures must be updated before converting the implementation.`,
-        { modal: true }
+        { modal: true },
+        'OK'
       );
       return;
     }
@@ -170,7 +172,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         }
       } else {
         await vscode.window.showWarningMessage(
-          `Objectify Params\n\n⚠️ This function cannot be converted\n\n` +
+          `Objectify Params\n\n❌ This function cannot be converted\n\n` +
           `The rest parameter "...${restParamName}" does not have named tuple elements.\n\n` +
           `To convert, you need a tuple type with named elements:\n` +
           `...${restParamName}: [param1: type1, param2: type2]\n\n` +
@@ -262,7 +264,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     
     const resolvedTarget = targetSym && (targetSym.getAliasedSymbol ? (targetSym.getAliasedSymbol() || targetSym) : targetSym);
     if (!resolvedTarget) {
-      void vscode.window.showInformationMessage('Objectify Params: This function cannot be converted — cannot resolve symbol for the selected function.');
+      void vscode.window.showInformationMessage('Objectify Params: This function cannot be converted. Unable to analyze the type information.');
       return;
     }
 
@@ -316,12 +318,11 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
                   tempEditor.setDecorations(highlightDecoration, [new vscode.Range(callStartPos, callEndPos)]);
                   
                   const response = await vscode.window.showWarningMessage(
-                    `Objectify Params\n\n⚠️ Cannot convert function\n\n` +
-                    `Found usage with .${propName}() at:\n` +
-                    `${path.basename(conflictFile)}:${callStartPos.line + 1}\n\n` +
+                    `Objectify Params\n\n❌ Cannot convert function\n\n` +
                     `The .call(), .apply(), and .bind() methods are incompatible with object parameters.\n\n` +
                     `Expression: ${exprText}`,
-                    { modal: true }
+                    { modal: true },
+                    'OK'
                   );
                   
                   highlightDecoration.dispose();
@@ -369,21 +370,15 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
               tempEditor.setDecorations(highlightDecoration, [new vscode.Range(callStartPos, callEndPos)]);
               
               const response = await vscode.window.showWarningMessage(
-                `⚠️ Cannot convert function\n\n` +
-                `Found usage with .call(), .apply(), or .bind() at:\n` +
-                `${path.basename(conflictFile)}:${callStartPos.line + 1}\n\n` +
+                `❌ Cannot convert function\n\n` +
                 `These methods pass arguments positionally and would break after conversion to object parameters.\n\n` +
                 `Expression: ${exprText}`,
                 { modal: true },
-                'Cancel Scanning'
+                'OK'
               );
               
               highlightDecoration.dispose();
-              
-              if (response === 'Cancel Scanning') {
-                log('User cancelled scanning due to call/apply/bind');
-                return;
-              }
+              return;
             }
           } catch (e) {
             log('error showing call/apply/bind warning:', e);
@@ -753,8 +748,15 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     if (fuzzy.length !== initialFuzzyCount) log('removed', initialFuzzyCount - fuzzy.length, 'fuzzy candidates that matched confirmed calls');
     fuzzy.sort((a, b) => (b.score || 0) - (a.score || 0));
 
-    // If monitoring, show preview for confirmed calls first
-    if (monitorConversions && confirmed.length > 0) {
+    // Process fuzzy calls first
+    const highlightDecoration = vscode.window.createTextEditorDecorationType({ backgroundColor: 'rgba(255,255,0,0.4)' });
+    const greenDecoration = vscode.window.createTextEditorDecorationType({ backgroundColor: 'rgba(100,255,100,0.3)' });
+    const redDecoration = vscode.window.createTextEditorDecorationType({ backgroundColor: 'rgba(255,100,100,0.3)' });
+    const totalCalls = confirmed.length + fuzzy.length;
+    const totalFuzzy = fuzzy.length;
+    let callIdx = 0; // Start at 0 for fuzzy calls
+    for (const candidate of fuzzy) {
+      callIdx++;
       const totalCalls = confirmed.length + fuzzy.length;
       const buildReplacement = (exprText: string, argsTextArr: string[]) => {
         const props = paramNames.map((name, idx) => {
@@ -874,10 +876,10 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
             tempEditor.setDecorations(collisionDecoration, [new vscode.Range(callStartPos, callEndPos)]);
             
             const choice = await vscode.window.showWarningMessage(
-              `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.\n\n⚠️ Name collision detected\n\nFound a call to "${fnName}" in:\n${conflictFile}\n\nThis call resolves to a different function than the one you're converting. This often happens when:\n• Scanning compiled JavaScript output\n• Multiple functions share the same name\n• Import aliases create ambiguity\n\nThis call will be ignored.`,
+              `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.\n\n⚠️ Name collision detected\n\nThis call resolves to a different function than the one you're converting. This often happens when:\n• Converting compiled JavaScript output\n• Multiple functions share the same name\n• Import aliases create ambiguity\n\nThis call will be ignored.`,
               { modal: true },
-              'Continue Scanning',
-              'Cancel Scanning'
+              'Continue',
+              'Cancel Conversion'
             );
             
             collisionDecoration.dispose();
@@ -890,7 +892,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
               });
             }
             
-            if (choice === 'Cancel Scanning') {
+            if (choice === 'Cancel Conversion') {
               log('User cancelled scanning due to name collision');
               highlightDecoration.dispose();
               return;
@@ -953,7 +955,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           `This function cannot be converted safely.`,
           { modal: true },
           'Skip This Call',
-          'Cancel Scanning'
+          'Cancel Conversion'
         );
         
         currentEditor = vscode.window.activeTextEditor;
@@ -962,7 +964,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           currentEditor.setDecorations(redDecoration, []);
         }
         
-        if (choice === 'Cancel Scanning') {
+        if (choice === 'Cancel Conversion') {
           highlightDecoration.dispose();
           void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
           if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, { selection: originalSelection, preserveFocus: false });
@@ -973,17 +975,17 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         continue;
       } else {
         choice = await vscode.window.showInformationMessage(
-          `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.\n\nIs this call a valid invocation of ${fnName}?`,
+          `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.\n\nIs this a call to the correct function? Should it be converted?`,
           { modal: true },
-          'Valid',
-          'Invalid'
+          'Convert',
+          'Skip'
         );
         
         // Change color based on choice
         const currentEditor = vscode.window.activeTextEditor;
         if (currentEditor && startPos && endPos) {
           currentEditor.setDecorations(highlightDecoration, []);
-          if (choice === 'Valid') {
+          if (choice === 'Convert') {
             // Green for will convert
             currentEditor.setDecorations(greenDecoration, [new vscode.Range(startPos, endPos)]);
           } else {
@@ -995,7 +997,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         // Preview for highlightDelay before continuing
         await new Promise(r => setTimeout(r, highlightDelay));
         
-        if (choice !== 'Valid') {
+        if (choice !== 'Convert') {
           if (currentEditor) {
             currentEditor.setDecorations(greenDecoration, []);
             currentEditor.setDecorations(redDecoration, []);
