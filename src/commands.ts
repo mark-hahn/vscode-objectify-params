@@ -188,13 +188,6 @@ async function applyFunctionEditAndHighlight(
       : doc.positionAt(targetStart + signatureEnd);
   const functionRange = new vscode.Range(startPosReplace, newSignatureEndPos);
 
-  log(
-    'Highlighting function definition, range:',
-    functionRange,
-    'highlightDelay:',
-    highlightDelay
-  );
-
   if (originalEditor && originalSelection) {
     await vscode.window.showTextDocument(originalEditor.document, {
       selection: originalSelection,
@@ -204,16 +197,13 @@ async function applyFunctionEditAndHighlight(
     if (highlightDelay > 0) {
       const highlightColor =
         convertedCount > 0 ? 'rgba(100,255,100,0.3)' : 'rgba(255,100,100,0.3)';
-      log('Creating decoration with color:', highlightColor);
       const defDecoration = vscode.window.createTextEditorDecorationType({
         backgroundColor: highlightColor,
       });
       const currentEditor = vscode.window.activeTextEditor;
       if (currentEditor) {
         currentEditor.setDecorations(defDecoration, [functionRange]);
-        log('Decoration applied, waiting for', highlightDelay, 'ms');
         await new Promise((r) => setTimeout(r, highlightDelay));
-        log('Disposing decoration');
         defDecoration.dispose();
       }
     }
