@@ -77,13 +77,13 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     }
 
     if (!targetFunction) {
-      void vscode.window.showInformationMessage('Not on a function.');
+      void vscode.window.showInformationMessage('Objectify Params: Not on a function.');
       return;
     }
 
     const params = targetFunction.getParameters();
     if (!params || params.length === 0) {
-      void vscode.window.showInformationMessage('Function has zero parameters — nothing to convert.');
+      void vscode.window.showInformationMessage('Objectify Params: Function has zero parameters — nothing to convert.');
       return;
     }
 
@@ -100,7 +100,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
     if (hasParameterProperties) {
       await vscode.window.showWarningMessage(
-        `⚠️ This function cannot be converted\n\n` +
+        `Objectify Params\n\n⚠️ This function cannot be converted\n\n` +
         `This function uses TypeScript parameter properties (public/private/protected/readonly).\n\n` +
         `Converting would lose the automatic property assignment behavior.\n\n` +
         `Parameter properties are only valid in constructors and automatically create class fields.`,
@@ -113,7 +113,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     const hasOverloads = targetFunction.getOverloads && targetFunction.getOverloads().length > 0;
     if (hasOverloads) {
       await vscode.window.showWarningMessage(
-        `⚠️ This function cannot be converted\n\n` +
+        `Objectify Params\n\n⚠️ This function cannot be converted\n\n` +
         `This function uses TypeScript overload signatures.\n\n` +
         `Converting the implementation signature would break the overload signatures, ` +
         `which would need to be manually updated to match the new object parameter pattern.\n\n` +
@@ -152,7 +152,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         paramNames = restTupleElements;
         
         const choice = await vscode.window.showWarningMessage(
-          `⚠️ Rest parameter conversion\n\n` +
+          `Objectify Params\n\n⚠️ Rest parameter conversion\n\n` +
           `The rest parameter "...${restParamName}: [${restTupleElements.join(', ')}]" will be converted to destructured parameters { ${paramNames.join(', ')} }.\n\n` +
           `⚠️ Important: You must manually update the function body:\n` +
           `• Change ${restParamName}[0] → ${paramNames[0] || 'param'}\n` +
@@ -165,12 +165,12 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         );
         
         if (choice !== 'Continue') {
-          void vscode.window.showInformationMessage('Operation cancelled.');
+          void vscode.window.showInformationMessage('Objectify Params: Operation cancelled.');
           return;
         }
       } else {
         await vscode.window.showWarningMessage(
-          `⚠️ This function cannot be converted\n\n` +
+          `Objectify Params\n\n⚠️ This function cannot be converted\n\n` +
           `The rest parameter "...${restParamName}" does not have named tuple elements.\n\n` +
           `To convert, you need a tuple type with named elements:\n` +
           `...${restParamName}: [param1: type1, param2: type2]\n\n` +
@@ -206,7 +206,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     })();
 
     if (hasObjectDestructuring) {
-      void vscode.window.showInformationMessage('This function already uses object destructuring parameters.');
+      void vscode.window.showInformationMessage('Objectify Params: This function already uses object destructuring parameters.');
       return;
     }
 
@@ -262,7 +262,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     
     const resolvedTarget = targetSym && (targetSym.getAliasedSymbol ? (targetSym.getAliasedSymbol() || targetSym) : targetSym);
     if (!resolvedTarget) {
-      void vscode.window.showInformationMessage('This function cannot be converted — cannot resolve symbol for the selected function.');
+      void vscode.window.showInformationMessage('Objectify Params: This function cannot be converted — cannot resolve symbol for the selected function.');
       return;
     }
 
@@ -316,7 +316,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
                   tempEditor.setDecorations(highlightDecoration, [new vscode.Range(callStartPos, callEndPos)]);
                   
                   const response = await vscode.window.showWarningMessage(
-                    `⚠️ Cannot convert function\n\n` +
+                    `Objectify Params\n\n⚠️ Cannot convert function\n\n` +
                     `Found usage with .${propName}() at:\n` +
                     `${path.basename(conflictFile)}:${callStartPos.line + 1}\n\n` +
                     `The .call(), .apply(), and .bind() methods are incompatible with object parameters.\n\n` +
@@ -485,6 +485,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       log('fuzzy examples:', fuzzy.slice(0, 10));
     }
 
+    // Get monitor conversions setting early as it's used in multiple places
+    const monitorConversions = cfg.get('monitorConversions') as boolean;
+
     // If no calls found, still convert the function signature
     if (confirmed.length === 0 && fuzzy.length === 0) {
       log('No calls found, converting function signature only');
@@ -561,12 +564,100 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           flashDecoration.dispose();
         }
         
-        void vscode.window.showInformationMessage(`Updated function signature (no calls found in workspace).`);
+        void vscode.window.showInformationMessage(`Objectify Params: Updated function signature (no calls found in workspace).`);
       }
       return;
     }
 
     if (fuzzy.length === 0 && confirmed.length > 0) {
+      // Check if monitor conversions is enabled (already retrieved above)
+      if (monitorConversions) {
+        // Show preview dialog for each confirmed call
+        const totalCalls = confirmed.length;
+        const buildReplacement = (exprText: string, argsTextArr: string[]) => {
+          const props = paramNames.map((name, idx) => {
+            const aText = argsTextArr && argsTextArr[idx] ? argsTextArr[idx] : 'undefined';
+            if (aText === name) return `${name}`;
+            return `${name}:${aText}`;
+          }).join(', ');
+          return `${exprText}({ ${props} })`;
+        };
+        
+        const yellowDecoration = vscode.window.createTextEditorDecorationType({ 
+          backgroundColor: 'rgba(255,255,0,0.4)'
+        });
+        const redDecoration = vscode.window.createTextEditorDecorationType({ 
+          backgroundColor: 'rgba(255,100,100,0.3)'
+        });
+        
+        let callIdx = 0;
+        for (const c of confirmed) {
+          callIdx++;
+          
+          try {
+            const doc = await vscode.workspace.openTextDocument(c.filePath);
+            const startPos = doc.positionAt(c.start);
+            const endPos = doc.positionAt(c.end);
+            
+            await vscode.window.showTextDocument(doc, { preview: true });
+            const editor = vscode.window.activeTextEditor;
+            
+            if (editor) {
+              const topLine = Math.max(0, startPos.line - 5);
+              const topPos = new vscode.Position(topLine, 0);
+              editor.revealRange(new vscode.Range(topPos, topPos), vscode.TextEditorRevealType.AtTop);
+              
+              // Show original in yellow for 1 second
+              editor.setDecorations(yellowDecoration, [new vscode.Range(startPos, endPos)]);
+              
+              // Show dialog and wait 1 second before switching to preview
+              const dialogPromise = vscode.window.showInformationMessage(
+                `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.`,
+                { modal: true },
+                'Next',
+                'Cancel'
+              );
+              
+              await new Promise(r => setTimeout(r, 1000));
+              
+              // Switch to preview in light red
+              const repl = buildReplacement(c.exprText, c.argsText);
+              await editor.edit(editBuilder => {
+                editBuilder.replace(new vscode.Range(startPos, endPos), repl);
+              });
+              
+              const newEndPos = doc.positionAt(c.start + repl.length);
+              editor.setDecorations(yellowDecoration, []);
+              editor.setDecorations(redDecoration, [new vscode.Range(startPos, newEndPos)]);
+              
+              const choice = await dialogPromise;
+              
+              // Undo the preview
+              await vscode.commands.executeCommand('undo');
+              editor.setDecorations(redDecoration, []);
+              
+              if (choice === 'Cancel') {
+                yellowDecoration.dispose();
+                redDecoration.dispose();
+                void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
+                if (originalEditor && originalSelection) {
+                  await vscode.window.showTextDocument(originalEditor.document, { 
+                    selection: originalSelection, 
+                    preserveFocus: false 
+                  });
+                }
+                return;
+              }
+            }
+          } catch (e) {
+            log('Error showing monitor preview:', e);
+          }
+        }
+        
+        yellowDecoration.dispose();
+        redDecoration.dispose();
+      }
+      
       const edit = new vscode.WorkspaceEdit();
       const docsToSave = new Map<string, vscode.TextDocument>();
       const replByFile = new Map<string, string>();
@@ -645,9 +736,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       }
       if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, { selection: originalSelection, preserveFocus: false });
       if (confirmed.length > 0) {
-        void vscode.window.showInformationMessage(`Converted ${confirmed.length} call(s) and updated function.`);
+        void vscode.window.showInformationMessage(`Objectify Params: Converted ${confirmed.length} call(s) and updated function.`);
       } else {
-        void vscode.window.showInformationMessage('Updated function signature (no calls were converted).');
+        void vscode.window.showInformationMessage('Objectify Params: Updated function signature (no calls were converted).');
       }
       return;
     }
@@ -660,6 +751,93 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     });
     if (fuzzy.length !== initialFuzzyCount) log('removed', initialFuzzyCount - fuzzy.length, 'fuzzy candidates that matched confirmed calls');
     fuzzy.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+    // If monitoring, show preview for confirmed calls first
+    if (monitorConversions && confirmed.length > 0) {
+      const totalCalls = confirmed.length + fuzzy.length;
+      const buildReplacement = (exprText: string, argsTextArr: string[]) => {
+        const props = paramNames.map((name, idx) => {
+          const aText = argsTextArr && argsTextArr[idx] ? argsTextArr[idx] : 'undefined';
+          if (aText === name) return `${name}`;
+          return `${name}:${aText}`;
+        }).join(', ');
+        return `${exprText}({ ${props} })`;
+      };
+      
+      const yellowDecoration = vscode.window.createTextEditorDecorationType({ 
+        backgroundColor: 'rgba(255,255,0,0.4)'
+      });
+      const redDecoration = vscode.window.createTextEditorDecorationType({ 
+        backgroundColor: 'rgba(255,100,100,0.3)'
+      });
+      
+      let callIdx = 0;
+      for (const c of confirmed) {
+        callIdx++;
+        
+        try {
+          const doc = await vscode.workspace.openTextDocument(c.filePath);
+          const startPos = doc.positionAt(c.start);
+          const endPos = doc.positionAt(c.end);
+          
+          await vscode.window.showTextDocument(doc, { preview: true });
+          const editor = vscode.window.activeTextEditor;
+          
+          if (editor) {
+            const topLine = Math.max(0, startPos.line - 5);
+            const topPos = new vscode.Position(topLine, 0);
+            editor.revealRange(new vscode.Range(topPos, topPos), vscode.TextEditorRevealType.AtTop);
+            
+            // Show original in yellow for 1 second
+            editor.setDecorations(yellowDecoration, [new vscode.Range(startPos, endPos)]);
+            
+            // Show dialog and wait 1 second before switching to preview
+            const dialogPromise = vscode.window.showInformationMessage(
+              `Objectify Params\\n\\nProcessing function call ${callIdx} of ${totalCalls}.`,
+              { modal: true },
+              'Next',
+              'Cancel'
+            );
+            
+            await new Promise(r => setTimeout(r, 1000));
+            
+            // Switch to preview in light red
+            const repl = buildReplacement(c.exprText, c.argsText);
+            await editor.edit(editBuilder => {
+              editBuilder.replace(new vscode.Range(startPos, endPos), repl);
+            });
+            
+            const newEndPos = doc.positionAt(c.start + repl.length);
+            editor.setDecorations(yellowDecoration, []);
+            editor.setDecorations(redDecoration, [new vscode.Range(startPos, newEndPos)]);
+            
+            const choice = await dialogPromise;
+            
+            // Undo the preview
+            await vscode.commands.executeCommand('undo');
+            editor.setDecorations(redDecoration, []);
+            
+            if (choice === 'Cancel') {
+              yellowDecoration.dispose();
+              redDecoration.dispose();
+              void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
+              if (originalEditor && originalSelection) {
+                await vscode.window.showTextDocument(originalEditor.document, { 
+                  selection: originalSelection, 
+                  preserveFocus: false 
+                });
+              }
+              return;
+            }
+          }
+        } catch (e) {
+          log('Error showing monitor preview:', e);
+        }
+      }
+      
+      yellowDecoration.dispose();
+      redDecoration.dispose();
+    }
 
     const highlightDecoration = vscode.window.createTextEditorDecorationType({ backgroundColor: 'rgba(255,255,0,0.4)' });
     const totalCalls = confirmed.length + fuzzy.length;
@@ -693,7 +871,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
             tempEditor.setDecorations(collisionDecoration, [new vscode.Range(callStartPos, callEndPos)]);
             
             const choice = await vscode.window.showWarningMessage(
-              `Processing function call ${callIdx} of ${totalCalls}.\n\n⚠️ Name collision detected\n\nFound a call to "${fnName}" in:\n${conflictFile}\n\nThis call resolves to a different function than the one you're converting. This often happens when:\n• Scanning compiled JavaScript output\n• Multiple functions share the same name\n• Import aliases create ambiguity\n\nThis call will be ignored.`,
+              `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.\n\n⚠️ Name collision detected\n\nFound a call to "${fnName}" in:\n${conflictFile}\n\nThis call resolves to a different function than the one you're converting. This often happens when:\n• Scanning compiled JavaScript output\n• Multiple functions share the same name\n• Import aliases create ambiguity\n\nThis call will be ignored.`,
               { modal: true },
               'Continue Scanning',
               'Cancel Scanning'
@@ -757,7 +935,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       let choice: string | undefined;
       if (willLoseArgs) {
         choice = await vscode.window.showWarningMessage(
-          `Processing function call ${callIdx} of ${totalCalls}.\n\n` +
+          `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.\n\n` +
           `⚠️ Argument count mismatch\n\n` +
           `This call has ${argCount} argument(s) but the function has ${paramNames.length} parameter(s).\n\n` +
           `Converting would lose ${argCount - paramNames.length} argument(s):\n` +
@@ -773,7 +951,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         
         if (choice === 'Cancel Scanning') {
           highlightDecoration.dispose();
-          void vscode.window.showInformationMessage('Operation cancelled — no changes made.');
+          void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
           if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, { selection: originalSelection, preserveFocus: false });
           return;
         }
@@ -782,7 +960,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         continue;
       } else {
         choice = await vscode.window.showInformationMessage(
-          `Processing function call ${callIdx} of ${totalCalls}.\n\nIs this call a valid invocation of ${fnName}?`,
+          `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.\n\nIs this call a valid invocation of ${fnName}?`,
           { modal: true },
           'Valid',
           'Invalid'
@@ -791,7 +969,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           const currentEditor = vscode.window.activeTextEditor;
           if (currentEditor) currentEditor.setDecorations(highlightDecoration, []);
           highlightDecoration.dispose();
-          void vscode.window.showInformationMessage('Operation cancelled — no changes made.');
+          void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
           if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, { selection: originalSelection, preserveFocus: false });
           return;
         }
@@ -859,7 +1037,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     
     if (allCandidates.length === 0) {
       log('No candidates to convert after fuzzy review');
-      void vscode.window.showInformationMessage('No calls were converted.');
+      void vscode.window.showInformationMessage('Objectify Params: No calls were converted.');
       if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, { selection: originalSelection, preserveFocus: false });
       return;
     }
@@ -952,7 +1130,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
     try { highlightDecoration.dispose(); } catch (e) { }
     if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, { selection: originalSelection, preserveFocus: false });
-    void vscode.window.showInformationMessage(`Converted ${confirmed.length + fuzzy.length} call(s) and updated function.`);
+    void vscode.window.showInformationMessage(`Objectify Params: Converted ${confirmed.length + fuzzy.length} call(s) and updated function.`);
   } catch (err) {
     console.error(err);
     void vscode.window.showErrorMessage('An error occurred: ' + (err.message || err));

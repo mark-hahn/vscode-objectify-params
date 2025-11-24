@@ -2,7 +2,8 @@ bugs...
   
 todo ...
   add detailed explanations to the dialog
-
+  check dark theme
+  
 testing ...
   params
     default
