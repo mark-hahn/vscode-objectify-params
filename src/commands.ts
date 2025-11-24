@@ -455,7 +455,12 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           paramTypeText = `{ ${paramNames.map(n => `${n}: any`).join('; ')} }`;
         }
       } else {
-        paramTypeText = `{ ${paramNames.map((n, i) => `${n}: ${paramTypes[i] || 'any'}`).join('; ')} }`;
+        paramTypeText = `{ ${paramNames.map((n, i) => {
+          const param = params[i];
+          const isOptional = param && param.hasQuestionToken && param.hasQuestionToken();
+          const optionalMark = isOptional ? '?' : '';
+          return `${n}${optionalMark}: ${paramTypes[i] || 'any'}`;
+        }).join('; ')} }`;
       }
       
       const isTypeScript = sourceFile.getFilePath().endsWith('.ts') || sourceFile.getFilePath().endsWith('.tsx');
@@ -692,7 +697,12 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         paramTypeText2 = `{ ${paramNames.map(n => `${n}: any`).join('; ')} }`;
       }
     } else {
-      paramTypeText2 = `{ ${paramNames.map((n, i) => `${n}: ${paramTypes2[i] || 'any'}`).join('; ')} }`;
+      paramTypeText2 = `{ ${paramNames.map((n, i) => {
+        const param = params[i];
+        const isOptional = param && param.hasQuestionToken && param.hasQuestionToken();
+        const optionalMark = isOptional ? '?' : '';
+        return `${n}${optionalMark}: ${paramTypes2[i] || 'any'}`;
+      }).join('; ')} }`;
     }
     
     const isTypeScript2 = sourceFile.getFilePath().endsWith('.ts') || sourceFile.getFilePath().endsWith('.tsx');

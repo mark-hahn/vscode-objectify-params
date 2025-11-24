@@ -4,8 +4,6 @@ todo ...
   add detailed explanations to the dialog
 
 params
-  deconstructing
-  Optional parameters (TypeScript): fn(x?: number) 
   Parameter properties (TypeScript): constructor(public x: number).
   Parameter decorators (TypeScript, experimental): @dec param for metadata/transform
   earlier params can be used by later defaults only if defined.
