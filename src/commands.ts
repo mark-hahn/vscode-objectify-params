@@ -571,6 +571,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     }
 
     if (fuzzy.length === 0 && confirmed.length > 0) {
+      let aborted = false;
+      
       // Check if monitor conversions is enabled (already retrieved above)
       if (monitorConversions) {
         // Show preview dialog for each confirmed call
@@ -593,6 +595,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         
         let callIdx = 0;
         for (const c of confirmed) {
+          if (aborted) break;
           callIdx++;
           
           try {
@@ -611,15 +614,30 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
               // Show original in yellow for 1 second
               editor.setDecorations(yellowDecoration, [new vscode.Range(startPos, endPos)]);
               
-              // Show dialog and wait 1 second before switching to preview
-              const dialogPromise = vscode.window.showInformationMessage(
+              await new Promise(r => setTimeout(r, highlightDelay));
+              
+              // Show dialog
+              const choice = await vscode.window.showInformationMessage(
                 `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.`,
                 { modal: true },
-                'Next',
-                'Cancel'
+                'Next'
               );
               
-              await new Promise(r => setTimeout(r, highlightDelay));
+              if (choice === undefined) {
+                log('User clicked cancel in confirmed monitoring dialog');
+                yellowDecoration.dispose();
+                greenDecoration.dispose();
+                void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
+                if (originalEditor && originalSelection) {
+                  await vscode.window.showTextDocument(originalEditor.document, { 
+                    selection: originalSelection, 
+                    preserveFocus: false 
+                  });
+                }
+                aborted = true;
+                log('Set aborted flag to true, breaking from loop');
+                break;
+              }
               
               // Switch to preview in light green (will convert)
               const repl = buildReplacement(c.exprText, c.argsText);
@@ -631,24 +649,11 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
               editor.setDecorations(yellowDecoration, []);
               editor.setDecorations(greenDecoration, [new vscode.Range(startPos, newEndPos)]);
               
-              const choice = await dialogPromise;
+              await new Promise(r => setTimeout(r, highlightDelay));
               
               // Undo the preview
               await vscode.commands.executeCommand('undo');
               editor.setDecorations(greenDecoration, []);
-              
-              if (choice === 'Cancel') {
-                yellowDecoration.dispose();
-                greenDecoration.dispose();
-                void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
-                if (originalEditor && originalSelection) {
-                  await vscode.window.showTextDocument(originalEditor.document, { 
-                    selection: originalSelection, 
-                    preserveFocus: false 
-                  });
-                }
-                return;
-              }
             }
           } catch (e) {
             log('Error showing monitor preview:', e);
@@ -657,6 +662,32 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         
         yellowDecoration.dispose();
         greenDecoration.dispose();
+        
+        log('After confirmed monitoring loop, aborted =', aborted);
+        
+        if (aborted) {
+          log('Aborted is true, returning early');
+          if (originalEditor && originalSelection) {
+            await vscode.window.showTextDocument(originalEditor.document, { 
+              selection: originalSelection, 
+              preserveFocus: false 
+            });
+          }
+          return;
+        }
+      }
+      
+      log('After monitoring block, aborted =', aborted);
+      
+      if (aborted) {
+        log('Aborted is true in outer check, returning early');
+        if (originalEditor && originalSelection) {
+          await vscode.window.showTextDocument(originalEditor.document, { 
+            selection: originalSelection, 
+            preserveFocus: false 
+          });
+        }
+        return;
       }
       
       const edit = new vscode.WorkspaceEdit();
@@ -753,8 +784,13 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     if (fuzzy.length !== initialFuzzyCount) log('removed', initialFuzzyCount - fuzzy.length, 'fuzzy candidates that matched confirmed calls');
     fuzzy.sort((a, b) => (b.score || 0) - (a.score || 0));
 
+    let aborted = false;
+    
+    log('monitorConversions:', monitorConversions, 'confirmed.length:', confirmed.length);
+    
     // If monitoring, show preview for confirmed calls first
     if (monitorConversions && confirmed.length > 0) {
+      log('Entering confirmed monitoring block');
       const totalCalls = confirmed.length + fuzzy.length;
       const buildReplacement = (exprText: string, argsTextArr: string[]) => {
         const props = paramNames.map((name, idx) => {
@@ -774,6 +810,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       
       let callIdx = 0;
       for (const c of confirmed) {
+        if (aborted) break;
         callIdx++;
         
         try {
@@ -792,15 +829,28 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
             // Show original in yellow for 1 second
             editor.setDecorations(yellowDecoration, [new vscode.Range(startPos, endPos)]);
             
-            // Show dialog and wait 1 second before switching to preview
-            const dialogPromise = vscode.window.showInformationMessage(
+            await new Promise(r => setTimeout(r, highlightDelay));
+            
+            // Show dialog
+            const choice = await vscode.window.showInformationMessage(
               `Objectify Params\\n\\nProcessing function call ${callIdx} of ${totalCalls}.`,
               { modal: true },
-              'Next',
-              'Cancel'
+              'Next'
             );
             
-            await new Promise(r => setTimeout(r, highlightDelay));
+            if (choice === undefined) {
+              yellowDecoration.dispose();
+              greenDecoration.dispose();
+              void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
+              if (originalEditor && originalSelection) {
+                await vscode.window.showTextDocument(originalEditor.document, { 
+                  selection: originalSelection, 
+                  preserveFocus: false 
+                });
+              }
+              aborted = true;
+              break;
+            }
             
             // Switch to preview in light green (will convert)
             const repl = buildReplacement(c.exprText, c.argsText);
@@ -812,24 +862,11 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
             editor.setDecorations(yellowDecoration, []);
             editor.setDecorations(greenDecoration, [new vscode.Range(startPos, newEndPos)]);
             
-            const choice = await dialogPromise;
+            await new Promise(r => setTimeout(r, highlightDelay));
             
             // Undo the preview
             await vscode.commands.executeCommand('undo');
             editor.setDecorations(greenDecoration, []);
-            
-            if (choice === 'Cancel') {
-              yellowDecoration.dispose();
-              greenDecoration.dispose();
-              void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
-              if (originalEditor && originalSelection) {
-                await vscode.window.showTextDocument(originalEditor.document, { 
-                  selection: originalSelection, 
-                  preserveFocus: false 
-                });
-              }
-              return;
-            }
           }
         } catch (e) {
           log('Error showing monitor preview:', e);
@@ -838,6 +875,27 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       
       yellowDecoration.dispose();
       greenDecoration.dispose();
+      
+      if (aborted) {
+        if (originalEditor && originalSelection) {
+          await vscode.window.showTextDocument(originalEditor.document, { 
+            selection: originalSelection, 
+            preserveFocus: false 
+          });
+        }
+        return;
+      }
+    }
+
+    if (aborted) {
+      log('Aborted after confirmed monitoring, skipping fuzzy calls');
+      if (originalEditor && originalSelection) {
+        await vscode.window.showTextDocument(originalEditor.document, { 
+          selection: originalSelection, 
+          preserveFocus: false 
+        });
+      }
+      return;
     }
 
     const highlightDecoration = vscode.window.createTextEditorDecorationType({ backgroundColor: 'rgba(255,255,0,0.4)' });
@@ -978,6 +1036,22 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           'Convert',
           'Skip'
         );
+        
+        // Handle cancel (×) button - abort entire conversion
+        if (choice === undefined) {
+          log('User clicked cancel (×) in validation dialog');
+          highlightDecoration.dispose();
+          greenDecoration.dispose();
+          redDecoration.dispose();
+          void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
+          if (originalEditor && originalSelection) {
+            await vscode.window.showTextDocument(originalEditor.document, { 
+              selection: originalSelection, 
+              preserveFocus: false 
+            });
+          }
+          return;
+        }
         
         // Change color based on choice
         const currentEditor = vscode.window.activeTextEditor;
