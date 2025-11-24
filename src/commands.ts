@@ -302,7 +302,12 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       log('fuzzy examples:', fuzzy.slice(0, 10));
     }
 
-    if (fuzzy.length === 0) {
+    if (confirmed.length === 0 && fuzzy.length === 0) {
+      void vscode.window.showInformationMessage(`No calls to ${fnName} were found in the workspace.`);
+      return;
+    }
+
+    if (fuzzy.length === 0 && confirmed.length > 0) {
       const edit = new vscode.WorkspaceEdit();
       const docsToSave = new Map<string, vscode.TextDocument>();
       const replByFile = new Map<string, string>();
@@ -328,15 +333,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       }
       const ok = await vscode.workspace.applyEdit(edit);
       log('applyEdit result:', ok);
-      for (const [fp, d] of docsToSave) {
-        await d.save();
-        log('saved', fp);
-        try {
-          const afterText = d.getText();
-          const expected = replByFile.get(fp);
-          log('post-save buffer len:', afterText.length, 'contains expected repl?', expected ? afterText.indexOf(expected) >= 0 : 'no-expected-repl');
-        } catch (e) { log('error reading buffer after save for', fp, e); }
-      }
+      log('modified', docsToSave.size, 'file(s) - files are marked dirty, user can save manually');
 
       const paramTypes = params.map((p: any) => {
         const tn = p.getTypeNode && p.getTypeNode();
@@ -357,13 +354,15 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         edit2.replace(uri, new vscode.Range(startPosReplace, endPosReplace), newFnText);
         const ok2 = await vscode.workspace.applyEdit(edit2);
         log('applied function text edit:', ok2);
-        await doc.save();
-        log('saved', uri.fsPath);
       } catch (e) {
         log('error applying function text edit', e);
       }
       if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, { selection: originalSelection, preserveFocus: false });
-      void vscode.window.showInformationMessage(`Converted ${confirmed.length} call(s) and updated function.`);
+      if (confirmed.length > 0) {
+        void vscode.window.showInformationMessage(`Converted ${confirmed.length} call(s) and updated function.`);
+      } else {
+        void vscode.window.showInformationMessage('Updated function signature (no calls were converted).');
+      }
       return;
     }
 
@@ -475,6 +474,15 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     };
 
     const allCandidates = [...confirmed, ...fuzzy];
+    log('allCandidates count:', allCandidates.length, '(confirmed:', confirmed.length, 'fuzzy:', fuzzy.length, ')');
+    
+    if (allCandidates.length === 0) {
+      log('No candidates to convert after fuzzy review');
+      void vscode.window.showInformationMessage('No calls were converted.');
+      if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, { selection: originalSelection, preserveFocus: false });
+      return;
+    }
+    
     const replAllMap = new Map<string, string>();
     for (const c of allCandidates) {
       if (c.filePath && typeof c.start === 'number' && typeof c.end === 'number') {
@@ -509,15 +517,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
     const ok2 = await vscode.workspace.applyEdit(editAll);
     log('applyEdit(all) result:', ok2);
-    for (const [fp, d] of docsToSaveAll) {
-      await d.save();
-      log('saved', fp);
-      try {
-        const afterText = d.getText();
-        const expected = replAllMap.get(fp);
-        log('post-save buffer len:', afterText.length, 'contains expected repl?', expected ? afterText.indexOf(expected) >= 0 : 'no-expected-repl');
-      } catch (e) { log('error reading buffer after save for', fp, e); }
-    }
+    log('modified', docsToSaveAll.size, 'file(s) - files are marked dirty, user can save manually');
 
     const paramTypes2 = params.map((p: any) => {
       const tn = p.getTypeNode && p.getTypeNode();
@@ -538,8 +538,6 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       edit3.replace(uri2, new vscode.Range(startReplace2, endReplace2), newFnText2);
       const ok3 = await vscode.workspace.applyEdit(edit3);
       log('applied function text edit (all):', ok3);
-      await doc2.save();
-      log('saved', uri2.fsPath);
     } catch (e) {
       log('error applying function text edit (all)', e);
     }
