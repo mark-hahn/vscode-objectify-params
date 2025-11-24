@@ -846,7 +846,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
             tempEditor.setDecorations(collisionDecoration, [new vscode.Range(callStartPos, callEndPos)]);
             
             const choice = await vscode.window.showWarningMessage(
-              `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.\n\n⚠️ Name collision detected\n\nFound a call to "${fnName}" in:\n${conflictFile}\n\nThis call resolves to a different function than the one you're converting. This often happens when:\n• Scanning compiled JavaScript output\n• Multiple functions share the same name\n• Import aliases create ambiguity\n\nThis call will be ignored.`,
+              `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.\nName collision detected. This call will not be converted.`,
               { modal: true },
               'Continue'
             );
