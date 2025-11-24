@@ -808,160 +808,15 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     
     log('monitorConversions:', monitorConversions, 'confirmed.length:', confirmed.length);
     
-    // If monitoring, show preview for confirmed calls first
-    if (monitorConversions && confirmed.length > 0) {
-      log('Entering confirmed monitoring block');
-      const totalCalls = confirmed.length + fuzzy.length;
-      const buildReplacement = (exprText: string, argsTextArr: string[]) => {
-        const props = paramNames.map((name, idx) => {
-          const aText = argsTextArr && argsTextArr[idx] ? argsTextArr[idx] : 'undefined';
-          if (aText === name) return `${name}`;
-          return `${name}:${aText}`;
-        }).join(', ');
-        return `${exprText}({ ${props} })`;
-      };
-      
-      const yellowDecoration = vscode.window.createTextEditorDecorationType({ 
-        backgroundColor: 'rgba(255,255,0,0.4)'
-      });
-      const greenDecoration = vscode.window.createTextEditorDecorationType({ 
-        backgroundColor: 'rgba(100,255,100,0.3)'
-      });
-      
-      let callIdx = 0;
-      for (const c of confirmed) {
-        if (aborted) break;
-        callIdx++;
-        
-        try {
-          const doc = await vscode.workspace.openTextDocument(c.filePath);
-          const startPos = doc.positionAt(c.start);
-          const endPos = doc.positionAt(c.end);
-          
-          await vscode.window.showTextDocument(doc, { preview: true });
-          const editor = vscode.window.activeTextEditor;
-          
-          if (editor) {
-            const topLine = Math.max(0, startPos.line - 5);
-            const topPos = new vscode.Position(topLine, 0);
-            editor.revealRange(new vscode.Range(topPos, topPos), vscode.TextEditorRevealType.AtTop);
-            
-            // Build replacement to get the preview text
-            const repl = buildReplacement(c.exprText, c.argsText);
-            
-            if (highlightDelay === 0) {
-              // For delay=0: show green preview immediately while dialog is open
-              await editor.edit(editBuilder => {
-                editBuilder.replace(new vscode.Range(startPos, endPos), repl);
-              });
-              
-              const newEndPos = doc.positionAt(c.start + repl.length);
-              editor.setDecorations(greenDecoration, [new vscode.Range(startPos, newEndPos)]);
-              
-              // Show dialog
-              const choice = await vscode.window.showInformationMessage(
-                `Objectify Params\\n\\nProcessing function call ${callIdx} of ${totalCalls}.`,
-                { modal: true },
-                'Next'
-              );
-              
-              // Clear preview and undo immediately after dialog
-              editor.setDecorations(greenDecoration, []);
-              await vscode.commands.executeCommand('undo');
-              
-              if (choice === undefined) {
-                yellowDecoration.dispose();
-                greenDecoration.dispose();
-                void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
-                if (originalEditor && originalSelection) {
-                  await vscode.window.showTextDocument(originalEditor.document, { 
-                    selection: originalSelection, 
-                    preserveFocus: false 
-                  });
-                }
-                aborted = true;
-                break;
-              }
-            } else {
-              // For delay>0: show yellow, delay, dialog, then green preview
-              // Show original in yellow
-              editor.setDecorations(yellowDecoration, [new vscode.Range(startPos, endPos)]);
-              
-              await new Promise(r => setTimeout(r, highlightDelay));
-              
-              // Show dialog
-              const choice = await vscode.window.showInformationMessage(
-                `Objectify Params\\n\\nProcessing function call ${callIdx} of ${totalCalls}.`,
-                { modal: true },
-                'Next'
-              );
-              
-              if (choice === undefined) {
-                yellowDecoration.dispose();
-                greenDecoration.dispose();
-                void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
-                if (originalEditor && originalSelection) {
-                  await vscode.window.showTextDocument(originalEditor.document, { 
-                    selection: originalSelection, 
-                    preserveFocus: false 
-                  });
-                }
-                aborted = true;
-                break;
-              }
-              
-              // Switch to preview in light green (will convert)
-              await editor.edit(editBuilder => {
-                editBuilder.replace(new vscode.Range(startPos, endPos), repl);
-              });
-              
-              const newEndPos = doc.positionAt(c.start + repl.length);
-              editor.setDecorations(yellowDecoration, []);
-              editor.setDecorations(greenDecoration, [new vscode.Range(startPos, newEndPos)]);
-              
-              await new Promise(r => setTimeout(r, highlightDelay));
-              
-              // Undo the preview
-              await vscode.commands.executeCommand('undo');
-              editor.setDecorations(greenDecoration, []);
-            }
-          }
-        } catch (e) {
-          log('Error showing monitor preview:', e);
-        }
-      }
-      
-      yellowDecoration.dispose();
-      greenDecoration.dispose();
-      
-      if (aborted) {
-        if (originalEditor && originalSelection) {
-          await vscode.window.showTextDocument(originalEditor.document, { 
-            selection: originalSelection, 
-            preserveFocus: false 
-          });
-        }
-        return;
-      }
-    }
+    // Process fuzzy calls first, then confirmed calls (when monitoring is enabled)
 
-    if (aborted) {
-      log('Aborted after confirmed monitoring, skipping fuzzy calls');
-      if (originalEditor && originalSelection) {
-        await vscode.window.showTextDocument(originalEditor.document, { 
-          selection: originalSelection, 
-          preserveFocus: false 
-        });
-      }
-      return;
-    }
 
     const highlightDecoration = vscode.window.createTextEditorDecorationType({ backgroundColor: 'rgba(255,255,0,0.4)' });
     const greenDecoration = vscode.window.createTextEditorDecorationType({ backgroundColor: 'rgba(100,255,100,0.3)' });
     const redDecoration = vscode.window.createTextEditorDecorationType({ backgroundColor: 'rgba(255,100,100,0.3)' });
     const totalCalls = confirmed.length + fuzzy.length;
     const totalFuzzy = fuzzy.length;
-    let callIdx = confirmed.length; // Start after confirmed calls
+    let callIdx = 0; // Start fuzzy calls at index 1
     const acceptedFuzzy: typeof fuzzy = []; // Track which fuzzy calls were accepted
     for (const candidate of fuzzy) {
       callIdx++;
@@ -1125,26 +980,16 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           currentEditor.setDecorations(greenDecoration, []);
           currentEditor.setDecorations(redDecoration, []);
           
-          // Only show post-dialog preview if delay > 0
-          if (highlightDelay > 0) {
-            if (choice === 'Convert') {
-              // Green for will convert
-              currentEditor.setDecorations(greenDecoration, [new vscode.Range(startPos, endPos)]);
-            } else {
-              // Red for won't convert
-              currentEditor.setDecorations(redDecoration, [new vscode.Range(startPos, endPos)]);
-            }
+          // Only show post-dialog preview if delay > 0 AND user chose Skip
+          if (highlightDelay > 0 && choice === 'Skip') {
+            // Red for won't convert
+            currentEditor.setDecorations(redDecoration, [new vscode.Range(startPos, endPos)]);
+            await new Promise(r => setTimeout(r, highlightDelay));
           }
-        }
-        
-        // Preview for highlightDelay before continuing
-        if (highlightDelay > 0) {
-          await new Promise(r => setTimeout(r, highlightDelay));
         }
         
         if (choice !== 'Convert') {
           if (currentEditor) {
-            currentEditor.setDecorations(greenDecoration, []);
             currentEditor.setDecorations(redDecoration, []);
           }
           // Skip this call and continue with the rest
@@ -1205,6 +1050,153 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       } catch (e) {
         log('preview error', e);
       }
+    }
+
+    // If monitoring, show preview for confirmed calls AFTER fuzzy calls
+    if (monitorConversions && confirmed.length > 0 && !aborted) {
+      log('Entering confirmed monitoring block');
+      const buildReplacement = (exprText: string, argsTextArr: string[]) => {
+        const props = paramNames.map((name, idx) => {
+          const aText = argsTextArr && argsTextArr[idx] ? argsTextArr[idx] : 'undefined';
+          if (aText === name) return `${name}`;
+          return `${name}:${aText}`;
+        }).join(', ');
+        return `${exprText}({ ${props} })`;
+      };
+      
+      const yellowDecoration = vscode.window.createTextEditorDecorationType({ 
+        backgroundColor: 'rgba(255,255,0,0.4)'
+      });
+      const greenDecoration = vscode.window.createTextEditorDecorationType({ 
+        backgroundColor: 'rgba(100,255,100,0.3)'
+      });
+      
+      // Continue callIdx from where fuzzy calls left off
+      for (const c of confirmed) {
+        if (aborted) break;
+        callIdx++;
+        
+        try {
+          const doc = await vscode.workspace.openTextDocument(c.filePath);
+          const startPos = doc.positionAt(c.start);
+          const endPos = doc.positionAt(c.end);
+          
+          await vscode.window.showTextDocument(doc, { preview: true });
+          const editor = vscode.window.activeTextEditor;
+          
+          if (editor) {
+            const topLine = Math.max(0, startPos.line - 5);
+            const topPos = new vscode.Position(topLine, 0);
+            editor.revealRange(new vscode.Range(topPos, topPos), vscode.TextEditorRevealType.AtTop);
+            
+            // Build replacement to get the preview text
+            const repl = buildReplacement(c.exprText, c.argsText);
+            
+            if (highlightDelay === 0) {
+              // For delay=0: show green preview immediately while dialog is open
+              await editor.edit(editBuilder => {
+                editBuilder.replace(new vscode.Range(startPos, endPos), repl);
+              });
+              
+              const newEndPos = doc.positionAt(c.start + repl.length);
+              editor.setDecorations(greenDecoration, [new vscode.Range(startPos, newEndPos)]);
+              
+              // Show dialog
+              const choice = await vscode.window.showInformationMessage(
+                `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.`,
+                { modal: true },
+                'Next'
+              );
+              
+              // Clear preview and undo immediately after dialog
+              editor.setDecorations(greenDecoration, []);
+              await vscode.commands.executeCommand('undo');
+              
+              if (choice === undefined) {
+                yellowDecoration.dispose();
+                greenDecoration.dispose();
+                void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
+                if (originalEditor && originalSelection) {
+                  await vscode.window.showTextDocument(originalEditor.document, { 
+                    selection: originalSelection, 
+                    preserveFocus: false 
+                  });
+                }
+                aborted = true;
+                break;
+              }
+            } else {
+              // For delay>0: show yellow, delay, dialog, then green preview
+              // Show original in yellow
+              editor.setDecorations(yellowDecoration, [new vscode.Range(startPos, endPos)]);
+              
+              await new Promise(r => setTimeout(r, highlightDelay));
+              
+              // Show dialog
+              const choice = await vscode.window.showInformationMessage(
+                `Objectify Params\n\nProcessing function call ${callIdx} of ${totalCalls}.`,
+                { modal: true },
+                'Next'
+              );
+              
+              if (choice === undefined) {
+                yellowDecoration.dispose();
+                greenDecoration.dispose();
+                void vscode.window.showInformationMessage('Objectify Params: Operation cancelled — no changes made.');
+                if (originalEditor && originalSelection) {
+                  await vscode.window.showTextDocument(originalEditor.document, { 
+                    selection: originalSelection, 
+                    preserveFocus: false 
+                  });
+                }
+                aborted = true;
+                break;
+              }
+              
+              // Switch to preview in light green (will convert)
+              await editor.edit(editBuilder => {
+                editBuilder.replace(new vscode.Range(startPos, endPos), repl);
+              });
+              
+              const newEndPos = doc.positionAt(c.start + repl.length);
+              editor.setDecorations(yellowDecoration, []);
+              editor.setDecorations(greenDecoration, [new vscode.Range(startPos, newEndPos)]);
+              
+              await new Promise(r => setTimeout(r, highlightDelay));
+              
+              // Undo the preview
+              await vscode.commands.executeCommand('undo');
+              editor.setDecorations(greenDecoration, []);
+            }
+          }
+        } catch (e) {
+          log('Error showing monitor preview:', e);
+        }
+      }
+      
+      yellowDecoration.dispose();
+      greenDecoration.dispose();
+      
+      if (aborted) {
+        if (originalEditor && originalSelection) {
+          await vscode.window.showTextDocument(originalEditor.document, { 
+            selection: originalSelection, 
+            preserveFocus: false 
+          });
+        }
+        return;
+      }
+    }
+
+    if (aborted) {
+      log('Aborted after confirmed monitoring');
+      if (originalEditor && originalSelection) {
+        await vscode.window.showTextDocument(originalEditor.document, { 
+          selection: originalSelection, 
+          preserveFocus: false 
+        });
+      }
+      return;
     }
 
     const editAll = new vscode.WorkspaceEdit();
