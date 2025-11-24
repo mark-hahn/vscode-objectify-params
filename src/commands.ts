@@ -613,12 +613,11 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
                 const newEndPos = doc.positionAt(c.start + repl.length);
                 editor.setDecorations(greenDecoration, [new vscode.Range(startPos, newEndPos)]);
               } else {
-                // Show original in yellow for delay duration
+                // Show original in yellow
                 editor.setDecorations(yellowDecoration, [new vscode.Range(startPos, endPos)]);
-                await new Promise(r => setTimeout(r, highlightDelay));
               }
               
-              // Show dialog
+              // Show dialog immediately (while highlight is visible)
               const choice = await vscode.window.showInformationMessage(
                 `Objectify Params: Processing function call ${callIdx} of ${totalCalls}.`,
                 { modal: true },
@@ -650,6 +649,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
                 editor.setDecorations(greenDecoration, []);
                 await vscode.commands.executeCommand('undo');
               } else {
+                // Clear yellow, show preview in green, then wait
+                editor.setDecorations(yellowDecoration, []);
+                
                 // Switch to preview in light green (will convert)
                 const repl = buildReplacement(c.exprText, c.argsText);
                 await editor.edit(editBuilder => {
@@ -1160,13 +1162,11 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
                 break;
               }
             } else {
-              // For delay>0: show yellow, delay, dialog, then green preview
+              // For delay>0: show yellow, show dialog immediately, then green preview
               // Show original in yellow
               editor.setDecorations(yellowDecoration, [new vscode.Range(startPos, endPos)]);
               
-              await new Promise(r => setTimeout(r, highlightDelay));
-              
-              // Show dialog
+              // Show dialog immediately (while yellow highlight is visible)
               const choice = await vscode.window.showInformationMessage(
                 `Objectify Params: Processing function call ${callIdx} of ${totalCalls}.`,
                 { modal: true },
@@ -1186,6 +1186,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
                 aborted = true;
                 break;
               }
+              
+              // Clear yellow, show green preview, then wait
+              editor.setDecorations(yellowDecoration, []);
               
               // Switch to preview in light green (will convert)
               await editor.edit(editBuilder => {
