@@ -15,7 +15,7 @@
     "commands": [
       {
         "command": "objectifyParams.convert",
-        "title": "Convert function params into an object"
+        "title": "Objectify Parameters"
       }
     ],
     "menus": {
@@ -29,7 +29,7 @@
     },
     "configuration": {
       "type": "object",
-      "title": "Objectify Params",
+      "title": "Objectify Parameters",
       "properties": {
         "objectifyParams.include": {
           "type": "string",
