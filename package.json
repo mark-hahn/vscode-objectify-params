@@ -16,10 +16,6 @@
       {
         "command": "objectifyParams.convert",
         "title": "Convert function params into an object"
-      },
-      {
-        "command": "objectifyParams.checkFunctions",
-        "title": "Check functions for reliable refactor"
       }
     ],
     "configuration": {
