@@ -94,7 +94,67 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       return;
     }
 
-    const paramNames = params.map((p: any) => p.getName());
+    // Check for rest parameters and extract tuple element names
+    let paramNames: string[] = [];
+    let isRestParameter = false;
+    let restTupleElements: string[] = [];
+    
+    if (params.length === 1 && params[0].isRestParameter && params[0].isRestParameter()) {
+      isRestParameter = true;
+      const restParam = params[0];
+      const restParamName = restParam.getName();
+      const typeNode = restParam.getTypeNode();
+      
+      // Try to extract tuple element names from type like: [cmd: string, val: any]
+      if (typeNode) {
+        const typeText = typeNode.getText();
+        const tupleMatch = typeText.match(/\[([^\]]+)\]/);
+        if (tupleMatch) {
+          const elements = tupleMatch[1].split(',').map(e => e.trim());
+          restTupleElements = elements.map(e => {
+            const colonIndex = e.indexOf(':');
+            return colonIndex > 0 ? e.substring(0, colonIndex).trim() : e;
+          }).filter(Boolean);
+        }
+      }
+      
+      // Show appropriate dialog based on whether we have named tuple elements
+      if (restTupleElements.length > 0) {
+        paramNames = restTupleElements;
+        
+        const choice = await vscode.window.showWarningMessage(
+          `⚠️ Rest parameter conversion\n\n` +
+          `The rest parameter "...${restParamName}: [${restTupleElements.join(', ')}]" will be converted to destructured parameters { ${paramNames.join(', ')} }.\n\n` +
+          `⚠️ Important: You must manually update the function body:\n` +
+          `• Change ${restParamName}[0] → ${paramNames[0] || 'param'}\n` +
+          `• Change ${restParamName}[1] → ${paramNames[1] || 'param'}\n` +
+          `• etc.\n\n` +
+          `Continue with conversion?`,
+          { modal: true },
+          'Continue',
+          'Cancel'
+        );
+        
+        if (choice !== 'Continue') {
+          void vscode.window.showInformationMessage('Operation cancelled.');
+          return;
+        }
+      } else {
+        await vscode.window.showWarningMessage(
+          `⚠️ This function cannot be converted\n\n` +
+          `The rest parameter "...${restParamName}" does not have named tuple elements.\n\n` +
+          `To convert, you need a tuple type with named elements:\n` +
+          `...${restParamName}: [param1: type1, param2: type2]\n\n` +
+          `Without named elements, the extension cannot determine how to map call arguments to object properties.`,
+          { modal: true },
+          'OK'
+        );
+        return;
+      }
+    } else {
+      paramNames = params.map((p: any) => p.getName());
+    }
+    
     let fnName = targetFunction.getName ? targetFunction.getName() : null;
     
     // If arrow function or function expression assigned to variable, get name from variable
@@ -161,16 +221,23 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       const after = fnText.slice(close);
       
       // Build destructured params with defaults preserved
-      const paramsWithDefaults = params.map((p: any) => {
-        const name = p.getName();
-        const hasDefault = p.hasInitializer && p.hasInitializer();
-        if (hasDefault) {
-          const initializer = p.getInitializer();
-          const defaultValue = initializer ? initializer.getText() : undefined;
-          return defaultValue ? `${name} = ${defaultValue}` : name;
-        }
-        return name;
-      }).join(', ');
+      // For rest parameters, use the extracted paramNames, not the original param names
+      let paramsWithDefaults: string;
+      if (isRestParameter) {
+        // Rest parameters don't have defaults, just use the tuple element names
+        paramsWithDefaults = paramNames.join(', ');
+      } else {
+        paramsWithDefaults = params.map((p: any) => {
+          const name = p.getName();
+          const hasDefault = p.hasInitializer && p.hasInitializer();
+          if (hasDefault) {
+            const initializer = p.getInitializer();
+            const defaultValue = initializer ? initializer.getText() : undefined;
+            return defaultValue ? `${name} = ${defaultValue}` : name;
+          }
+          return name;
+        }).join(', ');
+      }
       
       const newParams = isTypeScript 
         ? `{ ${paramsWithDefaults} }: ${paramTypeText}`
@@ -190,7 +257,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     
     const resolvedTarget = targetSym && (targetSym.getAliasedSymbol ? (targetSym.getAliasedSymbol() || targetSym) : targetSym);
     if (!resolvedTarget) {
-      void vscode.window.showInformationMessage('Cannot resolve symbol for the selected function — aborting.');
+      void vscode.window.showInformationMessage('This function cannot be converted — cannot resolve symbol for the selected function.');
       return;
     }
 
@@ -388,7 +455,29 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         if (tn) return tn.getText();
         try { return p.getType().getText(); } catch (e) { return 'any'; }
       });
-      const paramTypeText = `{ ${paramNames.map((n, i) => `${n}: ${paramTypes[i] || 'any'}`).join('; ')} }`;
+      
+      let paramTypeText: string;
+      if (isRestParameter && restTupleElements.length > 0) {
+        // Extract individual types from tuple type [cmd: string, val: any]
+        const restParam = params[0];
+        const typeNode = restParam.getTypeNode();
+        const typeText = typeNode ? typeNode.getText() : '';
+        const tupleMatch = typeText.match(/\[([^\]]+)\]/);
+        
+        if (tupleMatch) {
+          const elements = tupleMatch[1].split(',').map(e => e.trim());
+          const types = elements.map(e => {
+            const colonIndex = e.indexOf(':');
+            return colonIndex > 0 ? e.substring(colonIndex + 1).trim() : 'any';
+          });
+          paramTypeText = `{ ${paramNames.map((n, i) => `${n}: ${types[i] || 'any'}`).join('; ')} }`;
+        } else {
+          paramTypeText = `{ ${paramNames.map(n => `${n}: any`).join('; ')} }`;
+        }
+      } else {
+        paramTypeText = `{ ${paramNames.map((n, i) => `${n}: ${paramTypes[i] || 'any'}`).join('; ')} }`;
+      }
+      
       const isTypeScript = sourceFile.getFilePath().endsWith('.ts') || sourceFile.getFilePath().endsWith('.tsx');
       try {
         const uri = vscode.Uri.file(sourceFile.getFilePath());
@@ -572,7 +661,29 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       if (tn) return tn.getText();
       try { return p.getType().getText(); } catch (e) { return 'any'; }
     });
-    const paramTypeText2 = `{ ${paramNames.map((n, i) => `${n}: ${paramTypes2[i] || 'any'}`).join('; ')} }`;
+    
+    let paramTypeText2: string;
+    if (isRestParameter && restTupleElements.length > 0) {
+      // Extract individual types from tuple type [cmd: string, val: any]
+      const restParam = params[0];
+      const typeNode = restParam.getTypeNode();
+      const typeText = typeNode ? typeNode.getText() : '';
+      const tupleMatch = typeText.match(/\[([^\]]+)\]/);
+      
+      if (tupleMatch) {
+        const elements = tupleMatch[1].split(',').map(e => e.trim());
+        const types = elements.map(e => {
+          const colonIndex = e.indexOf(':');
+          return colonIndex > 0 ? e.substring(colonIndex + 1).trim() : 'any';
+        });
+        paramTypeText2 = `{ ${paramNames.map((n, i) => `${n}: ${types[i] || 'any'}`).join('; ')} }`;
+      } else {
+        paramTypeText2 = `{ ${paramNames.map(n => `${n}: any`).join('; ')} }`;
+      }
+    } else {
+      paramTypeText2 = `{ ${paramNames.map((n, i) => `${n}: ${paramTypes2[i] || 'any'}`).join('; ')} }`;
+    }
+    
     const isTypeScript2 = sourceFile.getFilePath().endsWith('.ts') || sourceFile.getFilePath().endsWith('.tsx');
     try {
       const uri2 = vscode.Uri.file(sourceFile.getFilePath());
