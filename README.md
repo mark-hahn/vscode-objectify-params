@@ -1,14 +1,18 @@
 # Objectify Params
 
-Automatically refactor JavaScript and TypeScript functions to use object parameters instead of multiple positional parameters. This improves readability and makes your code more maintainable and easier to extend.
+Automatically refactor a JavaScript or TypeScript function to use object parameters instead of multiple positional parameters. This improves readability and makes your code more maintainable and easier to extend.
 
 ## Features
 
-- **Automatic Refactoring**: Converts function signatures and all call sites across your workspace
+- **Automatic Refactoring**: Converts the function signature and all call sites across your workspace
 - **Smart Detection**: Identifies confirmed safe conversions and asks about uncertain cases
 - **Preview Mode**: Optional preview dialogs to review each change before applying
 - **Workspace-Wide**: Scans and updates all matching files in your project
 - **Type-Safe**: Preserves TypeScript types, optional parameters, and function return types
+
+![Objectifying One Parameter List (Delay exaggerated)](images/intro.gif)
+
+*Objectifying One Function's Parameter List (Delay exaggerated).*
 
 ## Usage
 
