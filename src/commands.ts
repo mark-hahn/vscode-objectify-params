@@ -307,7 +307,11 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
               if (argsText.length === 1 && typeof argsText[0] === 'string' && argsText[0].trim().startsWith('{')) {
                 log('skipping already-object call at', sf.getFilePath(), 'text:', argsText[0]);
               } else {
-                if (args.length === 0) {
+                // Check if argument count matches parameter count
+                if (args.length !== paramNames.length) {
+                  log('argument count mismatch:', args.length, 'args vs', paramNames.length, 'params in', sf.getFilePath());
+                  fuzzy.push({ filePath: sf.getFilePath(), start: call.getStart(), end: call.getEnd(), exprText: expr.getText(), argsText, reason: 'arg-count-mismatch', score: 3 });
+                } else if (args.length === 0) {
                   fuzzy.push({ filePath: sf.getFilePath(), start: call.getStart(), end: call.getEnd(), exprText: expr.getText(), argsText, reason: 'no-args', score: 10 });
                 } else {
                   const firstArgText = (argsText[0] || '').trim();
@@ -543,14 +547,45 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         }
       }
 
-      const choice = await vscode.window.showInformationMessage(`Is this call a valid invocation of ${fnName}?`, { modal: true }, 'Valid', 'Invalid');
-      if (choice !== 'Valid') {
+      // Check if converting this call would lose arguments
+      const argCount = candidate.argsText ? candidate.argsText.length : 0;
+      const willLoseArgs = argCount > paramNames.length;
+      
+      let choice: string | undefined;
+      if (willLoseArgs) {
+        choice = await vscode.window.showWarningMessage(
+          `⚠️ Argument count mismatch\n\n` +
+          `This call has ${argCount} argument(s) but the function has ${paramNames.length} parameter(s).\n\n` +
+          `Converting would lose ${argCount - paramNames.length} argument(s):\n` +
+          `${candidate.argsText?.slice(paramNames.length).join(', ')}\n\n` +
+          `This function cannot be converted safely.`,
+          { modal: true },
+          'Skip This Call',
+          'Cancel Scanning'
+        );
+        
         const currentEditor = vscode.window.activeTextEditor;
         if (currentEditor) currentEditor.setDecorations(highlightDecoration, []);
-        highlightDecoration.dispose();
-        void vscode.window.showInformationMessage('Operation cancelled — no changes made.');
-        if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, { selection: originalSelection, preserveFocus: false });
-        return;
+        
+        if (choice === 'Cancel Scanning') {
+          highlightDecoration.dispose();
+          void vscode.window.showInformationMessage('Operation cancelled — no changes made.');
+          if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, { selection: originalSelection, preserveFocus: false });
+          return;
+        }
+        
+        // Skip this call and continue to next fuzzy
+        continue;
+      } else {
+        choice = await vscode.window.showInformationMessage(`Is this call a valid invocation of ${fnName}?`, { modal: true }, 'Valid', 'Invalid');
+        if (choice !== 'Valid') {
+          const currentEditor = vscode.window.activeTextEditor;
+          if (currentEditor) currentEditor.setDecorations(highlightDecoration, []);
+          highlightDecoration.dispose();
+          void vscode.window.showInformationMessage('Operation cancelled — no changes made.');
+          if (originalEditor && originalSelection) await vscode.window.showTextDocument(originalEditor.document, { selection: originalSelection, preserveFocus: false });
+          return;
+        }
       }
 
       try {
