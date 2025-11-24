@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-const outputChannel = vscode.window.createOutputChannel('objectifyParams');
+const outputChannel = vscode.window.createOutputChannel('Objectify Params');
 
 export interface WorkspaceContext {
   editor: vscode.TextEditor;
@@ -22,7 +22,9 @@ export function getWorkspaceContext(): WorkspaceContext | null {
   }
 
   const filePath = editor.document.fileName;
-  const containingFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+  const containingFolder = vscode.workspace.getWorkspaceFolder(
+    editor.document.uri
+  );
   const workspaceRoot = containingFolder
     ? containingFolder.uri.fsPath
     : workspaceFolders[0].uri.fsPath;
@@ -30,10 +32,10 @@ export function getWorkspaceContext(): WorkspaceContext | null {
   return { editor, workspaceRoot, filePath };
 }
 
-export function getLog(module: string) : {
-  log:   (...args: any[]) => void;
-  start: (name: string,     hide?: boolean, msg?: string)     => void;
-  end:   (name: string, onlySlow?: boolean, msg?: string) => void;
+export function getLog(module: string): {
+  log: (...args: any[]) => void;
+  start: (name: string, hide?: boolean, msg?: string) => void;
+  end: (name: string, onlySlow?: boolean, msg?: string) => void;
 } {
   const timers: Record<string, number> = {};
 
@@ -56,16 +58,18 @@ export function getLog(module: string) : {
     const endTime = Date.now();
     const duration = endTime - timers[name];
     if (onlySlow && duration < 100) return;
-    const line = `[objpar:${module}] ${name} ended, ${duration}ms${msg ? ', ' + msg : ''}`;
+    const line = `[objpar:${module}] ${name} ended, ${duration}ms${
+      msg ? ', ' + msg : ''
+    }`;
     outputChannel.appendLine(line);
     console.log(line);
   };
 
   const log = function (...args: any[]): void {
-    let errFlag    = false;
+    let errFlag = false;
     let errMsgFlag = false;
-    let infoFlag   = false;
-    let nomodFlag  = false;
+    let infoFlag = false;
+    let nomodFlag = false;
 
     if (typeof args[0] === 'string') {
       errFlag = args[0].includes('err');
@@ -78,8 +82,8 @@ export function getLog(module: string) : {
 
     let errMsg: string | undefined;
     if (errMsgFlag) {
-      errMsg  = args[0]?.message + ' -> ';
-      args    = args.slice(1);
+      errMsg = args[0]?.message + ' -> ';
+      args = args.slice(1);
       errFlag = true;
     }
 
@@ -93,12 +97,13 @@ export function getLog(module: string) : {
       } else return a;
     });
 
-    const line = (nomodFlag ? '' : '[objpar:' + module + '] ') +
-                 (errFlag ? ' error, ' : '') +
-                 (errMsg !== undefined ? errMsg : '') +
-                 par.join(' ');
+    const line =
+      (nomodFlag ? '' : '[objpar:' + module + '] ') +
+      (errFlag ? ' error, ' : '') +
+      (errMsg !== undefined ? errMsg : '') +
+      par.join(' ');
 
-    const infoLine = par.join('Objectify Params: ').replace('parse: ','');
+    const infoLine = par.join('Objectify Params: ').replace('parse: ', '');
 
     outputChannel.appendLine(line);
     if (errFlag) console.error(line);

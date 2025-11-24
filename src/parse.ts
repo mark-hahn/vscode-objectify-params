@@ -5,7 +5,9 @@ import * as utils from './utils';
 
 const { log } = utils.getLog('pars');
 
-export async function createProjectFromConfig(workspaceRoot: string): Promise<Project> {
+export async function createProjectFromConfig(
+  workspaceRoot: string
+): Promise<Project> {
   const project = new Project({
     tsConfigFilePath: undefined,
     compilerOptions: { allowJs: true, checkJs: false },
@@ -20,9 +22,12 @@ export async function createProjectFromConfig(workspaceRoot: string): Promise<Pr
 
   // Use VS Code's workspace.findFiles to respect glob include/exclude settings
   const foundSet = new Set<string>();
-  const excludeGlob = excludePatterns.length > 0 
-    ? (excludePatterns.length === 1 ? excludePatterns[0] : `{${excludePatterns.join(',')}}`) 
-    : undefined;
+  const excludeGlob =
+    excludePatterns.length > 0
+      ? excludePatterns.length === 1
+        ? excludePatterns[0]
+        : `{${excludePatterns.join(',')}}`
+      : undefined;
 
   for (const p of includePatterns) {
     try {
@@ -36,13 +41,23 @@ export async function createProjectFromConfig(workspaceRoot: string): Promise<Pr
 
   const jsTsFiles = Array.from(foundSet);
   log('workspaceRoot:', workspaceRoot);
-  log('includePatterns:', includePatterns, 'excludePatterns:', excludePatterns, 'found files:', jsTsFiles.length);
+  log(
+    'includePatterns:',
+    includePatterns,
+    'excludePatterns:',
+    excludePatterns,
+    'found files:',
+    jsTsFiles.length
+  );
 
   if (jsTsFiles.length > 0) {
     project.addSourceFilesAtPaths(jsTsFiles);
   } else {
     // Fallback: glob returned nothing (dev-host or config quirks). Add common JS/TS globs directly
-    const fallbackGlob = path.join(workspaceRoot, '**/*.{js,ts,jsx,tsx,mjs,cjs}');
+    const fallbackGlob = path.join(
+      workspaceRoot,
+      '**/*.{js,ts,jsx,tsx,mjs,cjs}'
+    );
     log('glob found no files; adding fallback project glob:', fallbackGlob);
     try {
       project.addSourceFilesAtPaths(fallbackGlob);
@@ -56,17 +71,21 @@ export async function createProjectFromConfig(workspaceRoot: string): Promise<Pr
 
 export function resolveSymbol(node: any): any {
   const sym = node.getSymbol ? node.getSymbol() : null;
-  return sym && sym.getAliasedSymbol ? (sym.getAliasedSymbol() || sym) : sym;
+  return sym && sym.getAliasedSymbol ? sym.getAliasedSymbol() || sym : sym;
 }
 
 export function getSymbolName(symbol: any): string | null {
   if (!symbol) return null;
-  return symbol.getFullyQualifiedName 
-    ? symbol.getFullyQualifiedName() 
-    : (symbol.getEscapedName ? symbol.getEscapedName() : null);
+  return symbol.getFullyQualifiedName
+    ? symbol.getFullyQualifiedName()
+    : symbol.getEscapedName
+    ? symbol.getEscapedName()
+    : null;
 }
 
-export function findFunctionsInFile(sourceFile: SourceFile): Array<{ node: any; name: string | null }> {
+export function findFunctionsInFile(
+  sourceFile: SourceFile
+): Array<{ node: any; name: string | null }> {
   const result: Array<{ node: any; name: string | null }> = [];
 
   const funcDecls = sourceFile.getFunctions();
@@ -78,7 +97,9 @@ export function findFunctionsInFile(sourceFile: SourceFile): Array<{ node: any; 
     const init = v.getInitializer && v.getInitializer();
     if (!init) return false;
     const k = init.getKind && init.getKind();
-    return k === SyntaxKind.ArrowFunction || k === SyntaxKind.FunctionExpression;
+    return (
+      k === SyntaxKind.ArrowFunction || k === SyntaxKind.FunctionExpression
+    );
   });
 
   for (const v of varDecls) {
