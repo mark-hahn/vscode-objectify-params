@@ -4,8 +4,6 @@ todo ...
   add detailed explanations to the dialog
 
 params
-  Variants inside destructuring: nested defaults, rest within destructuring (function f({a, ...rest} = {})).
-
   default
   rest
   deconstructing

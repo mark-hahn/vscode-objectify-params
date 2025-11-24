@@ -87,13 +87,6 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       return;
     }
 
-    const objectParamName = '$params$';
-
-    if (params.length === 1 && params[0].getName && params[0].getName() === objectParamName) {
-      void vscode.window.showInformationMessage('Function already uses object parameter — nothing to do.');
-      return;
-    }
-
     // Check for parameter properties (TypeScript constructor parameters with public/private/protected/readonly)
     const hasParameterProperties = params.some((p: any) => {
       try {
@@ -217,7 +210,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       return;
     }
 
-    const transformFunctionText = (fnText: string, paramNames: string[], objectParamName: string, paramTypeText: string, isTypeScript: boolean) => {
+    const transformFunctionText = (fnText: string, paramNames: string[], paramTypeText: string, isTypeScript: boolean) => {
       const open = fnText.indexOf('(');
       if (open < 0) return fnText;
       let i = open + 1;
@@ -609,7 +602,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         const uri = vscode.Uri.file(sourceFile.getFilePath());
         const doc = await vscode.workspace.openTextDocument(uri);
         const full = doc.getText();
-        const newFnText = transformFunctionText(originalFunctionText, paramNames, objectParamName, paramTypeText, isTypeScript);
+        const newFnText = transformFunctionText(originalFunctionText, paramNames, paramTypeText, isTypeScript);
         const idx = full.indexOf(originalFunctionText);
         const startPosReplace = idx >= 0 ? doc.positionAt(idx) : doc.positionAt(targetStart);
         const endPosReplace = idx >= 0 ? doc.positionAt(idx + originalFunctionText.length) : doc.positionAt(targetEnd);
@@ -850,7 +843,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     try {
       const uri2 = vscode.Uri.file(sourceFile.getFilePath());
       const doc2 = await vscode.workspace.openTextDocument(uri2);
-      const newFnText2 = transformFunctionText(originalFunctionText, paramNames, objectParamName, paramTypeText2, isTypeScript2);
+      const newFnText2 = transformFunctionText(originalFunctionText, paramNames, paramTypeText2, isTypeScript2);
       const full2 = doc2.getText();
       const idx2 = full2.indexOf(originalFunctionText);
       const startReplace2 = idx2 >= 0 ? doc2.positionAt(idx2) : doc2.positionAt(targetStart);
