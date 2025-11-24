@@ -105,8 +105,8 @@ MIT
 ## Links
 
 - [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=eridien.objectify-params)
-- [GitHub Repository](https://github.com/mark-hahn/vscode-params-to-object)
+- [GitHub Repository](https://github.com/mark-hahn/vscode-objectify-params)
 
 ## Contributing
 
-Issues and pull requests welcome at the [GitHub repository](https://github.com/mark-hahn/vscode-params-to-object).
+Issues and pull requests welcome at the [GitHub repository](https://github.com/mark-hahn/vscode-objectify-params).
