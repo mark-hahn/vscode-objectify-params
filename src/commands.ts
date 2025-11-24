@@ -94,6 +94,42 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       return;
     }
 
+    // Check for parameter properties (TypeScript constructor parameters with public/private/protected/readonly)
+    const hasParameterProperties = params.some((p: any) => {
+      try {
+        const scope = p.getScope && p.getScope();
+        const isReadonly = p.isReadonly && p.isReadonly();
+        return scope || isReadonly;
+      } catch {
+        return false;
+      }
+    });
+
+    if (hasParameterProperties) {
+      await vscode.window.showWarningMessage(
+        `⚠️ This function cannot be converted\n\n` +
+        `This function uses TypeScript parameter properties (public/private/protected/readonly).\n\n` +
+        `Converting would lose the automatic property assignment behavior.\n\n` +
+        `Parameter properties are only valid in constructors and automatically create class fields.`,
+        { modal: true }
+      );
+      return;
+    }
+
+    // Check for TypeScript function overloads
+    const hasOverloads = targetFunction.getOverloads && targetFunction.getOverloads().length > 0;
+    if (hasOverloads) {
+      await vscode.window.showWarningMessage(
+        `⚠️ This function cannot be converted\n\n` +
+        `This function uses TypeScript overload signatures.\n\n` +
+        `Converting the implementation signature would break the overload signatures, ` +
+        `which would need to be manually updated to match the new object parameter pattern.\n\n` +
+        `All overload signatures must be updated before converting the implementation.`,
+        { modal: true }
+      );
+      return;
+    }
+
     // Check for rest parameters and extract tuple element names
     let paramNames: string[] = [];
     let isRestParameter = false;
