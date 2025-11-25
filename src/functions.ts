@@ -106,7 +106,7 @@ export function findTargetFunction(
 
   // Get function name
   let fnName = targetFunction.getName ? targetFunction.getName() : null;
-  
+
   // If arrow function or function expression assigned to variable, get name from variable
   if (!fnName && targetVariableDeclaration) {
     fnName = targetVariableDeclaration.getName();

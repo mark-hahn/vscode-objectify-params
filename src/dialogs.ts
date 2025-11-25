@@ -154,11 +154,10 @@ export async function showNameCollisionDialog(
         vscode.TextEditorRevealType.AtTop
       );
 
-      const collisionDecoration =
-        vscode.window.createTextEditorDecorationType({
-          backgroundColor: 'rgba(255,100,100,0.3)',
-          border: '1px solid rgba(255,100,100,0.8)',
-        });
+      const collisionDecoration = vscode.window.createTextEditorDecorationType({
+        backgroundColor: 'rgba(255,100,100,0.3)',
+        border: '1px solid rgba(255,100,100,0.8)',
+      });
       tempEditor.setDecorations(collisionDecoration, [
         new vscode.Range(callStartPos, callEndPos),
       ]);
@@ -237,18 +236,13 @@ export async function reviewFuzzyCall(
           new vscode.Range(startPos, endPos),
         ]);
       }
-    } else if (
-      candidate.filePath &&
-      typeof candidate.rangeStart === 'number'
-    ) {
+    } else if (candidate.filePath && typeof candidate.rangeStart === 'number') {
       doc = await vscode.workspace.openTextDocument(candidate.filePath);
       await vscode.window.showTextDocument(doc, { preview: true });
       const editor2 = vscode.window.activeTextEditor;
       if (editor2) {
         startPos = doc.positionAt(candidate.rangeStart);
-        endPos = doc.positionAt(
-          candidate.rangeEnd || candidate.rangeStart + 1
-        );
+        endPos = doc.positionAt(candidate.rangeEnd || candidate.rangeStart + 1);
         const topLine = Math.max(0, startPos.line - 6);
         const topPos = new vscode.Position(topLine, 0);
         editor2.revealRange(
@@ -380,8 +374,7 @@ export async function showFuzzyConversionPreview(
           preview: true,
         });
       } catch (e) {
-        const activeEditor =
-          vscode.window.activeTextEditor || originalEditor;
+        const activeEditor = vscode.window.activeTextEditor || originalEditor;
         if (
           activeEditor &&
           activeEditor.document &&

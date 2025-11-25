@@ -37,12 +37,16 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     }
 
     // Find function declaration or function expression at cursor
-    const functionResult = functions.findTargetFunction(sourceFile, cursorOffset);
+    const functionResult = functions.findTargetFunction(
+      sourceFile,
+      cursorOffset
+    );
     if (!functionResult) {
       return;
     }
 
-    const { targetFunction, targetVariableDeclaration, params, fnName } = functionResult;
+    const { targetFunction, targetVariableDeclaration, params, fnName } =
+      functionResult;
 
     // Validate function can be converted
     const isValid = await functions.validateFunction(targetFunction, params);

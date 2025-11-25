@@ -95,12 +95,12 @@ export function extractParameterTypes(
         const typeText = typeNode.getText();
         const tupleMatch = typeText.match(/\[([^\]]+)\]/);
         if (tupleMatch) {
-          const elements = tupleMatch[1].split(',').map((e: string) => e.trim());
+          const elements = tupleMatch[1]
+            .split(',')
+            .map((e: string) => e.trim());
           return elements.map((e: string) => {
             const colonIndex = e.indexOf(':');
-            return colonIndex > 0
-              ? e.substring(colonIndex + 1).trim()
-              : 'any';
+            return colonIndex > 0 ? e.substring(colonIndex + 1).trim() : 'any';
           });
         }
       }
@@ -254,9 +254,9 @@ export async function collectCalls(
     const sfPath = sf.getFilePath && sf.getFilePath();
     if (sfPath && sfPath.indexOf(path.sep + 'node_modules' + path.sep) >= 0)
       continue;
-    
+
     const calls = sf.getDescendantsOfKind(SyntaxKind.CallExpression);
-    
+
     for (const call of calls) {
       const expr = call.getExpression();
       if (!expr) continue;
@@ -285,9 +285,7 @@ export async function collectCalls(
             log(`${propName}() detected in`, conflictFile, 'expr:', exprText);
 
             try {
-              const doc = await vscode.workspace.openTextDocument(
-                conflictFile
-              );
+              const doc = await vscode.workspace.openTextDocument(conflictFile);
               const callStartPos = doc.positionAt(call.getStart());
               const callEndPos = doc.positionAt(call.getEnd());
 
@@ -511,9 +509,7 @@ export async function collectCalls(
           log('Error during symbol comparison in', sf.getFilePath(), e);
 
           // Show error and abort - cannot safely parse this file
-          const doc = await vscode.workspace.openTextDocument(
-            sf.getFilePath()
-          );
+          const doc = await vscode.workspace.openTextDocument(sf.getFilePath());
           const callStartPos = doc.positionAt(call.getStart());
           const callEndPos = doc.positionAt(call.getEnd());
 
@@ -560,8 +556,7 @@ export async function collectCalls(
           exprText: expr.getText(),
           argsText,
           reason: 'unresolved',
-          score:
-            expr.getKind() === SyntaxKind.PropertyAccessExpression ? 8 : 4,
+          score: expr.getKind() === SyntaxKind.PropertyAccessExpression ? 8 : 4,
         });
       }
     }
@@ -614,12 +609,7 @@ export async function collectCalls(
       argsText: c.argsText,
       reason: c.reason,
     }));
-  log(
-    'confirmed call count:',
-    confirmed.length,
-    'fuzzy count:',
-    fuzzy.length
-  );
+  log('confirmed call count:', confirmed.length, 'fuzzy count:', fuzzy.length);
   try {
     log('confirmed details:', JSON.stringify(safeSerial(confirmed), null, 2));
     log('fuzzy details:', JSON.stringify(safeSerial(fuzzy), null, 2));
