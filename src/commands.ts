@@ -1159,37 +1159,30 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
             ]);
 
             const choice = await vscode.window.showWarningMessage(
-              `Objectify Params: Processing function call ${callIdx} of ${totalCalls}.\n\nName collision detected. This call will not be converted.`,
+              `Objectify Params: Cannot convert function.\n\nName collision detected. A call to a different function with the same name was found. Operation will be cancelled.`,
               { modal: true },
-              'Continue'
+              'OK'
             );
 
             collisionDecoration.dispose();
+            highlightDecoration.dispose();
+            greenDecoration.dispose();
+            redDecoration.dispose();
 
             // Restore original editor
-            if (originalEditor) {
+            if (originalEditor && originalSelection) {
               await vscode.window.showTextDocument(originalEditor.document, {
                 selection: originalSelection,
                 preserveFocus: false,
               });
             }
 
-            if (choice === undefined) {
-              log('User cancelled scanning due to name collision');
-              highlightDecoration.dispose();
-              greenDecoration.dispose();
-              redDecoration.dispose();
-              void vscode.window.showInformationMessage(
-                'Objectify Params: Operation cancelled — no changes made.'
-              );
-              return;
-            }
+            log('Aborting conversion due to name collision');
+            return;
           }
         } catch (e) {
           log('Error showing collision warning', e);
         }
-
-        continue;
       }
       let doc: vscode.TextDocument | undefined;
       let startPos: vscode.Position | undefined;
