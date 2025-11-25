@@ -285,32 +285,8 @@ export async function reviewFuzzyCall(
       return 'abort';
     }
 
-    // Change color based on choice
+    // Clear yellow decoration immediately after dialog closes
     const currentEditor = vscode.window.activeTextEditor;
-    if (currentEditor && startPos && endPos) {
-      // Clear previous decorations
-      currentEditor.setDecorations(highlightDecoration, []);
-      currentEditor.setDecorations(greenDecoration, []);
-      currentEditor.setDecorations(redDecoration, []);
-
-      // Show post-dialog preview if delay > 0
-      if (highlightDelay > 0) {
-        if (choice === 'Convert') {
-          // Green for will convert
-          currentEditor.setDecorations(greenDecoration, [
-            new vscode.Range(startPos, endPos),
-          ]);
-        } else {
-          // Red for won't convert
-          currentEditor.setDecorations(redDecoration, [
-            new vscode.Range(startPos, endPos),
-          ]);
-        }
-        await new Promise((r) => setTimeout(r, highlightDelay));
-      }
-    }
-
-    // Clear decorations
     if (currentEditor) {
       currentEditor.setDecorations(highlightDecoration, []);
       currentEditor.setDecorations(greenDecoration, []);
