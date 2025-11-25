@@ -12,14 +12,14 @@ Automatically refactor a JavaScript or TypeScript function to use object paramet
 
 ![Objectifying One Parameter List (Delay exaggerated)](images/intro.gif)
 
-*Objectifying One Function's Parameter List (Delay exaggerated).*
+*Objectifying One Function's Parameter List. Preview walkthrough is optional.*
 
 ## Usage
 
-1. Place your cursor inside a function definition
-2. Right-click and select **"Objectify Parameters"** (or use the Command Palette)
-3. Review any uncertain conversions in interactive dialogs
-4. The extension updates both the function signature and all call sites
+1. Place your cursor inside a function definition.
+2. Right-click and select **"Objectify Parameters"** or use the Command Palette.  You can assign your own hot-key.
+3. Review any uncertain conversions in interactive dialogs.
+4. The extension updates both the function signature and all call sites.
 
 ### Before
 ```typescript
