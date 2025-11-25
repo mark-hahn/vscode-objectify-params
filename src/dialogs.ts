@@ -61,7 +61,10 @@ export async function showFunctionConversionDialog(
 
       // Apply the converted function temporarily
       await editor.edit((editBuilder) => {
-        editBuilder.replace(new vscode.Range(startPos, endPos), newFunctionText);
+        editBuilder.replace(
+          new vscode.Range(startPos, endPos),
+          newFunctionText
+        );
       });
 
       // Calculate the signature range (up to the opening brace)
