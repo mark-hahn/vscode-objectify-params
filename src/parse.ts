@@ -563,17 +563,54 @@ export async function collectCalls(
           return { confirmed: [], fuzzy: [], shouldAbort: true };
         }
       } else {
+        // Could not resolve symbol - check argument count to decide confirmed vs fuzzy
         const args = call.getArguments();
         const argsText = args.map((a: any) => (a ? a.getText() : 'undefined'));
-        fuzzy.push({
-          filePath: sf.getFilePath(),
-          start: call.getStart(),
-          end: call.getEnd(),
-          exprText: expr.getText(),
-          argsText,
-          reason: 'unresolved',
-          score: expr.getKind() === SyntaxKind.PropertyAccessExpression ? 8 : 4,
-        });
+        
+        // Skip if already converted to object syntax
+        if (
+          argsText.length === 1 &&
+          typeof argsText[0] === 'string' &&
+          argsText[0].trim().startsWith('{')
+        ) {
+          log(
+            'skipping already-object call at',
+            sf.getFilePath(),
+            'text:',
+            argsText[0]
+          );
+          continue;
+        }
+        
+        if (args.length > paramNames.length) {
+          // Too many args - must be fuzzy to avoid data loss
+          fuzzy.push({
+            filePath: sf.getFilePath(),
+            start: call.getStart(),
+            end: call.getEnd(),
+            exprText: expr.getText(),
+            argsText,
+            reason: 'unresolved-too-many-args',
+            score: 3,
+          });
+        } else {
+          // args.length <= paramNames.length - safe to auto-convert even without symbol resolution
+          log('CONFIRMED CALL ADDED (unresolved symbol but safe arg count):', {
+            file: sf.getFilePath(),
+            start: call.getStart(),
+            end: call.getEnd(),
+            exprText: expr.getText(),
+            argsText,
+            callText: call.getText()
+          });
+          confirmed.push({
+            filePath: sf.getFilePath(),
+            start: call.getStart(),
+            end: call.getEnd(),
+            exprText: expr.getText(),
+            argsText,
+          });
+        }
       }
     }
   }
@@ -601,6 +638,19 @@ export async function collectCalls(
   // Normalize file paths for comparison and collect existing ranges
   const normalizeFilePath = (fp: string) => fp.replace(/\\/g, '/').toLowerCase();
   const existingRanges: Array<{file: string, start: number, end: number}> = [];
+  
+  // Add confirmed ranges
+  for (const c of confirmed) {
+    if (c.start !== undefined && c.end !== undefined) {
+      existingRanges.push({
+        file: normalizeFilePath(c.filePath),
+        start: c.start,
+        end: c.end
+      });
+    }
+  }
+  
+  // Add fuzzy ranges
   for (const f of fuzzy) {
     if (f.start !== undefined && f.end !== undefined) {
       existingRanges.push({

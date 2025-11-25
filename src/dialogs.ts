@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as utils from './utils';
+import * as text from './text';
 
 const { log } = utils.getLog('dlgs');
 
@@ -449,17 +450,7 @@ export async function showFuzzyConversionPreview(
   highlightDelay: number,
   originalEditor: vscode.TextEditor | undefined
 ): Promise<void> {
-  if (!candidate.argsText || candidate.argsText.length < paramNames.length) {
-    return;
-  }
-
-  const repl = buildCallReplacement(
-    candidate.exprText,
-    candidate.argsText,
-    paramNames
-  );
-
-  // Only show preview if highlightDelay > 0
+  // Skip preview if highlightDelay is 0
   if (highlightDelay <= 0) {
     return;
   }
@@ -494,18 +485,63 @@ export async function showFuzzyConversionPreview(
 
     if (targetEditor) {
       const doc = targetEditor.document;
-      const startP = doc.positionAt(candidate.start);
-      const endP = doc.positionAt(candidate.end);
       const priorSelections = targetEditor.selections.slice();
       const priorVisibleRanges = targetEditor.visibleRanges.slice();
+      
+      // Determine if this is a template call or regular call
+      const isTemplateCall = candidate.argsText === null && candidate.rangeStart !== undefined;
+      
+      let startP: vscode.Position;
+      let endP: vscode.Position;
+      let repl: string;
+      
+      if (isTemplateCall) {
+        // Template call - use string manipulation to build replacement
+        const fullText = doc.getText();
+        const conversionResult = text.buildTemplateCallReplacement(
+          fullText,
+          candidate.rangeStart,
+          paramNames
+        );
+        
+        if (!conversionResult) {
+          // Can't convert, just highlight
+          startP = doc.positionAt(candidate.rangeStart);
+          endP = doc.positionAt(candidate.rangeStart + 50); // Rough estimate
+          const callRange = new vscode.Range(startP, endP);
+          targetEditor.setDecorations(greenDecoration, [callRange]);
+          targetEditor.revealRange(callRange, vscode.TextEditorRevealType.InCenter);
+          await new Promise((r) => setTimeout(r, highlightDelay));
+          targetEditor.setDecorations(greenDecoration, []);
+          return;
+        }
+        
+        startP = doc.positionAt(conversionResult.start);
+        endP = doc.positionAt(conversionResult.end);
+        repl = conversionResult.replacement;
+      } else {
+        // Regular call - use buildCallReplacement
+        if (!candidate.argsText || candidate.argsText.length < paramNames.length) {
+          return; // Can't preview
+        }
+        
+        startP = doc.positionAt(candidate.start);
+        endP = doc.positionAt(candidate.end);
+        repl = buildCallReplacement(
+          candidate.exprText,
+          candidate.argsText,
+          paramNames
+        );
+      }
 
+      // Show preview with edit+undo
       await targetEditor.edit((editBuilder) => {
         editBuilder.replace(new vscode.Range(startP, endP), repl);
       });
 
       const callRange = new vscode.Range(
         startP,
-        doc.positionAt(candidate.start + repl.length)
+        doc.positionAt(doc.offsetAt(startP) + repl.length)
       );
       targetEditor.setDecorations(greenDecoration, [callRange]);
       await new Promise((r) => setTimeout(r, highlightDelay));
@@ -523,8 +559,6 @@ export async function showFuzzyConversionPreview(
             vscode.TextEditorRevealType.Default
           );
       } catch (e) {}
-    } else {
-      void vscode.window.showInformationMessage(`Preview: ${repl}`);
     }
   } catch (e) {
     log('preview error', e);

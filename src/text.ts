@@ -68,11 +68,58 @@ export function buildCallReplacement(
     .map((name, idx) => {
       const aText =
         argsTextArr && argsTextArr[idx] ? argsTextArr[idx] : 'undefined';
-      if (aText === name) return `${name}`;
+      // Use shorthand if argument is exactly the same identifier
+      if (aText === name || aText.trim() === name) return `${name}`;
       return `${name}:${aText}`;
     })
     .join(', ');
   return `${exprText}({ ${props} })`;
+}
+
+/**
+ * Build replacement text for a template call (Vue/Svelte) using string manipulation
+ * Returns the replacement text and the range to replace
+ */
+export function buildTemplateCallReplacement(
+  fullText: string,
+  rangeStart: number,
+  paramNames: string[]
+): { replacement: string; start: number; end: number } | null {
+  const after = fullText.slice(rangeStart);
+  const parenIndex = after.indexOf('(');
+  const closeIndex = after.indexOf(')');
+  
+  if (parenIndex < 0 || closeIndex <= parenIndex) {
+    return null;
+  }
+  
+  const argsText = after.slice(parenIndex + 1, closeIndex);
+  const argParts = argsText
+    .split(',')
+    .map((s: string) => s.trim())
+    .filter((s: string) => s.length);
+  
+  if (argParts.length !== paramNames.length) {
+    return null;
+  }
+  
+  const props = paramNames
+    .map((name, idx) => {
+      const arg = argParts[idx];
+      // Use shorthand if argument is exactly the same identifier
+      if (arg === name || arg.trim() === name) return `${name}`;
+      return `${name}:${arg}`;
+    })
+    .join(', ');
+  
+  const functionName = fullText.slice(rangeStart, rangeStart + parenIndex);
+  const replacement = `${functionName}({ ${props} })`;
+  
+  return {
+    replacement,
+    start: rangeStart,
+    end: rangeStart + closeIndex + 1
+  };
 }
 
 /**
