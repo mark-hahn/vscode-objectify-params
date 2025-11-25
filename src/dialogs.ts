@@ -23,6 +23,133 @@ function buildCallReplacement(
 }
 
 /**
+ * Show the function being converted with green highlight and confirmation dialog
+ * Shows a preview of the converted function signature
+ * Returns true if aborted, false if user chose to continue
+ */
+export async function showFunctionConversionDialog(
+  filePath: string,
+  targetStart: number,
+  targetEnd: number,
+  originalFunctionText: string,
+  newFunctionText: string,
+  originalEditor: vscode.TextEditor | undefined,
+  originalSelection: vscode.Selection | undefined
+): Promise<boolean> {
+  const greenDecoration = vscode.window.createTextEditorDecorationType({
+    backgroundColor: 'rgba(100,255,100,0.3)',
+  });
+
+  try {
+    const doc = await vscode.workspace.openTextDocument(filePath);
+    const full = doc.getText();
+    const idx = full.indexOf(originalFunctionText);
+    const startPos =
+      idx >= 0 ? doc.positionAt(idx) : doc.positionAt(targetStart);
+    const endPos =
+      idx >= 0
+        ? doc.positionAt(idx + originalFunctionText.length)
+        : doc.positionAt(targetEnd);
+
+    await vscode.window.showTextDocument(doc, { preview: false });
+    const editor = vscode.window.activeTextEditor;
+
+    if (editor) {
+      // Save editor state for restoration
+      const priorSelections = editor.selections.slice();
+      const priorVisibleRanges = editor.visibleRanges.slice();
+
+      // Apply the converted function temporarily
+      await editor.edit((editBuilder) => {
+        editBuilder.replace(new vscode.Range(startPos, endPos), newFunctionText);
+      });
+
+      // Calculate the signature range (up to the opening brace)
+      let parenDepth = 0;
+      let signatureEnd = 0;
+      for (let i = 0; i < newFunctionText.length; i++) {
+        if (newFunctionText[i] === '(') parenDepth++;
+        if (newFunctionText[i] === ')') {
+          parenDepth--;
+          if (parenDepth === 0) {
+            const remaining = newFunctionText.substring(i + 1);
+            const braceIdx = remaining.indexOf('{');
+            signatureEnd = braceIdx >= 0 ? i + 1 + braceIdx : i + 1;
+            break;
+          }
+        }
+      }
+      if (signatureEnd === 0) signatureEnd = newFunctionText.indexOf('{');
+      if (signatureEnd <= 0) signatureEnd = newFunctionText.length;
+
+      const newSignatureEndPos =
+        idx >= 0
+          ? doc.positionAt(idx + signatureEnd)
+          : doc.positionAt(targetStart + signatureEnd);
+
+      // Reveal the function near top
+      editor.revealRange(
+        new vscode.Range(startPos, startPos),
+        vscode.TextEditorRevealType.InCenter
+      );
+
+      // Show green highlight on the function signature only
+      editor.setDecorations(greenDecoration, [
+        new vscode.Range(startPos, newSignatureEndPos),
+      ]);
+
+      // Show confirmation dialog
+      const choice = await vscode.window.showInformationMessage(
+        'Converting function parameters.',
+        { modal: true },
+        'Continue'
+      );
+
+      // Undo the preview
+      await vscode.commands.executeCommand('undo');
+
+      // Clear decoration
+      editor.setDecorations(greenDecoration, []);
+      greenDecoration.dispose();
+
+      // Restore editor state
+      try {
+        editor.selections = priorSelections;
+      } catch (e) {}
+      try {
+        if (priorVisibleRanges && priorVisibleRanges.length)
+          editor.revealRange(
+            priorVisibleRanges[0],
+            vscode.TextEditorRevealType.Default
+          );
+      } catch (e) {}
+
+      // Handle cancel (×) button
+      if (choice === undefined) {
+        void vscode.window.showInformationMessage(
+          'Objectify Params: Operation cancelled — no changes made.'
+        );
+        if (originalEditor && originalSelection) {
+          await vscode.window.showTextDocument(originalEditor.document, {
+            selection: originalSelection,
+            preserveFocus: false,
+          });
+        }
+        return true; // aborted
+      }
+
+      return false; // not aborted
+    }
+  } catch (e) {
+    log('Error showing function conversion dialog:', e);
+  } finally {
+    greenDecoration.dispose();
+  }
+
+  return false; // not aborted
+}
+
+/**
  * Monitor and show confirmed calls with preview
  * Returns true if aborted, false otherwise
  */
@@ -52,11 +179,9 @@ export async function monitorConfirmedCalls(
       const editor = vscode.window.activeTextEditor;
 
       if (editor) {
-        const topLine = Math.max(0, startPos.line - 5);
-        const topPos = new vscode.Position(topLine, 0);
         editor.revealRange(
-          new vscode.Range(topPos, topPos),
-          vscode.TextEditorRevealType.AtTop
+          new vscode.Range(startPos, startPos),
+          vscode.TextEditorRevealType.InCenter
         );
 
         const repl = buildCallReplacement(c.exprText, c.argsText, paramNames);
@@ -147,11 +272,9 @@ export async function showNameCollisionDialog(
     const tempEditor = vscode.window.activeTextEditor;
 
     if (tempEditor) {
-      const topLine = Math.max(0, callStartPos.line - 5);
-      const topPos = new vscode.Position(topLine, 0);
       tempEditor.revealRange(
-        new vscode.Range(topPos, topPos),
-        vscode.TextEditorRevealType.AtTop
+        new vscode.Range(callStartPos, callStartPos),
+        vscode.TextEditorRevealType.InCenter
       );
 
       const collisionDecoration = vscode.window.createTextEditorDecorationType({
@@ -225,11 +348,9 @@ export async function reviewFuzzyCall(
       await vscode.window.showTextDocument(doc, { preview: true });
       const editor2 = vscode.window.activeTextEditor;
       if (editor2) {
-        const topLine = Math.max(0, startPos.line - 6);
-        const topPos = new vscode.Position(topLine, 0);
         editor2.revealRange(
-          new vscode.Range(topPos, topPos),
-          vscode.TextEditorRevealType.AtTop
+          new vscode.Range(startPos, startPos),
+          vscode.TextEditorRevealType.InCenter
         );
         // Show yellow (original) since we don't know user's choice yet
         editor2.setDecorations(highlightDecoration, [
@@ -243,11 +364,9 @@ export async function reviewFuzzyCall(
       if (editor2) {
         startPos = doc.positionAt(candidate.rangeStart);
         endPos = doc.positionAt(candidate.rangeEnd || candidate.rangeStart + 1);
-        const topLine = Math.max(0, startPos.line - 6);
-        const topPos = new vscode.Position(topLine, 0);
         editor2.revealRange(
-          new vscode.Range(topPos, topPos),
-          vscode.TextEditorRevealType.AtTop
+          new vscode.Range(startPos, startPos),
+          vscode.TextEditorRevealType.InCenter
         );
         // Show yellow (original) since we don't know user's choice yet
         editor2.setDecorations(highlightDecoration, [

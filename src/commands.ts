@@ -113,6 +113,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     );
 
     if (callCollection.shouldAbort) {
+      void vscode.window.showInformationMessage(
+        'Objectify Params: Operation cancelled — no changes made.'
+      );
       return;
     }
 
@@ -202,6 +205,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         );
 
         if (aborted) {
+          void vscode.window.showInformationMessage(
+            'Objectify Params: Operation cancelled — no changes made.'
+          );
           return;
         }
       }
@@ -315,14 +321,47 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       confirmed.length
     );
 
-    // Process fuzzy calls first, then confirmed calls (when monitoring is enabled)
+    // Show function conversion dialog if monitoring is enabled
+    if (monitorConversions && (confirmed.length > 0 || fuzzy.length > 0)) {
+      // Build the converted function text for preview
+      const isTypeScript =
+        sourceFile.getFilePath().endsWith('.ts') ||
+        sourceFile.getFilePath().endsWith('.tsx');
+      const paramTypeText = parse.extractParameterTypes(
+        params,
+        paramNames,
+        sourceFile,
+        isRestParameter,
+        restTupleElements
+      );
+      const newFnText = text.transformFunctionText(
+        originalFunctionText,
+        params,
+        paramNames,
+        paramTypeText,
+        isTypeScript,
+        isRestParameter
+      );
 
-    log(
-      'monitorConversions:',
-      monitorConversions,
-      'confirmed.length:',
-      confirmed.length
-    );
+      aborted = await dialogs.showFunctionConversionDialog(
+        filePath,
+        targetStart,
+        targetEnd,
+        originalFunctionText,
+        newFnText,
+        originalEditor,
+        originalSelection
+      );
+
+      if (aborted) {
+        void vscode.window.showInformationMessage(
+          'Objectify Params: Operation cancelled — no changes made.'
+        );
+        return;
+      }
+    }
+
+    // Process fuzzy calls first, then confirmed calls (when monitoring is enabled)
 
     const totalCalls = confirmed.length + fuzzy.length;
     const totalFuzzy = fuzzy.length;
@@ -339,6 +378,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           originalSelection
         );
         if (shouldAbort) {
+          void vscode.window.showInformationMessage(
+            'Objectify Params: Operation cancelled — no changes made.'
+          );
           return;
         }
       }
@@ -395,12 +437,18 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       );
 
       if (aborted) {
+        void vscode.window.showInformationMessage(
+          'Objectify Params: Operation cancelled — no changes made.'
+        );
         return;
       }
     }
 
     if (aborted) {
       log('Aborted after confirmed monitoring');
+      void vscode.window.showInformationMessage(
+        'Objectify Params: Operation cancelled — no changes made.'
+      );
       if (originalEditor && originalSelection) {
         await vscode.window.showTextDocument(originalEditor.document, {
           selection: originalSelection,
