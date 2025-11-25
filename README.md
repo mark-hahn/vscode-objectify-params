@@ -114,3 +114,7 @@ MIT
 ### Contributing
 
 Issues and pull requests welcome at the [GitHub repository](https://github.com/mark-hahn/vscode-objectify-params).
+
+### Author
+
+Mark Hahn (eridien)

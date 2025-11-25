@@ -195,6 +195,65 @@ export async function applyCallEdits(
 /**
  * Apply function signature edit and highlight the changed signature
  */
+export async function highlightConvertedFunction(
+  filePath: string,
+  targetStart: number,
+  newFnText: string,
+  originalEditor: vscode.TextEditor | undefined,
+  originalSelection: vscode.Selection | undefined,
+  highlightDelay: number
+): Promise<void> {
+  const uri = vscode.Uri.file(filePath);
+  const doc = await vscode.workspace.openTextDocument(uri);
+  
+  // Calculate signature end
+  let parenDepth = 0;
+  let signatureEnd = 0;
+  for (let i = 0; i < newFnText.length; i++) {
+    if (newFnText[i] === '(') parenDepth++;
+    if (newFnText[i] === ')') {
+      parenDepth--;
+      if (parenDepth === 0) {
+        const remaining = newFnText.substring(i + 1);
+        const braceIdx = remaining.indexOf('{');
+        signatureEnd = braceIdx >= 0 ? i + 1 + braceIdx : i + 1;
+        break;
+      }
+    }
+  }
+  if (signatureEnd === 0) signatureEnd = newFnText.indexOf('{');
+  if (signatureEnd <= 0) signatureEnd = newFnText.length;
+
+  const startPos = doc.positionAt(targetStart);
+  const endPos = doc.positionAt(targetStart + signatureEnd);
+
+  if (highlightDelay > 0) {
+    await vscode.window.showTextDocument(doc, { preview: false });
+    const editor = vscode.window.activeTextEditor;
+    if (editor) {
+      const flashDecoration = vscode.window.createTextEditorDecorationType({
+        backgroundColor: 'rgba(100,255,100,0.3)',
+        border: '1px solid rgba(100,255,100,0.8)',
+      });
+
+      editor.setDecorations(flashDecoration, [
+        new vscode.Range(startPos, endPos),
+      ]);
+
+      await new Promise((resolve) => setTimeout(resolve, highlightDelay));
+      flashDecoration.dispose();
+    }
+  }
+
+  // Restore original editor
+  if (originalEditor && originalSelection) {
+    await vscode.window.showTextDocument(originalEditor.document, {
+      selection: originalSelection,
+      preserveFocus: false,
+    });
+  }
+}
+
 export async function applyFunctionEditAndHighlight(
   sourceFile: any,
   originalFunctionText: string,

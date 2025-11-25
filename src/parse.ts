@@ -29,6 +29,7 @@ export interface CollectedCalls {
   confirmed: CallCandidate[];
   fuzzy: CallCandidate[];
   shouldAbort: boolean;
+  alreadyConvertedCount?: number;
 }
 
 /**
@@ -152,26 +153,27 @@ export async function createProjectFromConfig(
   const includePatterns = includeStr.split(/\s+/).filter(Boolean);
   const excludePatterns = excludeStr.split(/\s+/).filter(Boolean);
 
-  // Use VS Code's workspace.findFiles to respect glob include/exclude settings
+  // Use glob to find files (respects our exclude patterns, not .gitignore)
   const foundSet = new Set<string>();
-  const excludeGlob =
-    excludePatterns.length > 0
-      ? excludePatterns.length === 1
-        ? excludePatterns[0]
-        : `{${excludePatterns.join(',')}}`
-      : undefined;
 
   for (const p of includePatterns) {
     try {
-      const rel = new vscode.RelativePattern(workspaceRoot, p);
-      const uris = await vscode.workspace.findFiles(rel, excludeGlob);
-      for (const u of uris) foundSet.add(u.fsPath);
+      const matches = glob.sync(p, {
+        cwd: workspaceRoot,
+        ignore: excludePatterns,
+        nodir: true,
+        absolute: true,
+      });
+      for (const m of matches) foundSet.add(m);
     } catch (e) {
       // ignore pattern errors for individual include patterns
     }
   }
 
   const jsTsFiles = Array.from(foundSet);
+
+  log('Found', jsTsFiles.length, 'files to add to project');
+  log('Sample files:', jsTsFiles.slice(0, 5));
 
   if (jsTsFiles.length > 0) {
     project.addSourceFilesAtPaths(jsTsFiles);
@@ -239,10 +241,12 @@ export async function collectCalls(
   resolvedTarget: any,
   paramNames: string[],
   originalEditor: vscode.TextEditor,
-  originalSelection: vscode.Selection
+  originalSelection: vscode.Selection,
+  sourceFilePath: string
 ): Promise<CollectedCalls> {
   const confirmed: CallCandidate[] = [];
   let fuzzy: CallCandidate[] = [];
+  let alreadyConvertedCount = 0;
 
   const files = project.getSourceFiles();
   log(
@@ -431,19 +435,44 @@ export async function collectCalls(
         try {
           // Only compare symbols if we have a resolved target
           if (resolvedTarget) {
-            const fnId = resolvedTarget.getFullyQualifiedName
-              ? resolvedTarget.getFullyQualifiedName()
-              : resolvedTarget.getEscapedName &&
-                resolvedTarget.getEscapedName();
-            const callId = resolvedCalled.getFullyQualifiedName
-              ? resolvedCalled.getFullyQualifiedName()
-              : resolvedCalled.getEscapedName &&
-                resolvedCalled.getEscapedName();
+            // Compare by declaration location instead of just name
+            let isMatch = false;
+            
+            try {
+              const targetDecls = resolvedTarget.getDeclarations?.() || [];
+              const calledDecls = resolvedCalled.getDeclarations?.() || [];
+              
+              if (targetDecls.length > 0 && calledDecls.length > 0) {
+                // Check if any declaration locations match
+                for (const tDecl of targetDecls) {
+                  for (const cDecl of calledDecls) {
+                    const tFile = tDecl.getSourceFile?.()?.getFilePath?.();
+                    const cFile = cDecl.getSourceFile?.()?.getFilePath?.();
+                    const tStart = tDecl.getStart?.();
+                    const cStart = cDecl.getStart?.();
+                    
+                    if (tFile && cFile && tFile === cFile && tStart === cStart) {
+                      isMatch = true;
+                      break;
+                    }
+                  }
+                  if (isMatch) break;
+                }
+              }
+            } catch (e) {
+              // Fall back to name comparison
+              const fnId = resolvedTarget.getFullyQualifiedName
+                ? resolvedTarget.getFullyQualifiedName()
+                : resolvedTarget.getEscapedName &&
+                  resolvedTarget.getEscapedName();
+              const callId = resolvedCalled.getFullyQualifiedName
+                ? resolvedCalled.getFullyQualifiedName()
+                : resolvedCalled.getEscapedName &&
+                  resolvedCalled.getEscapedName();
+              isMatch = fnId && callId && fnId === callId;
+            }
 
-            // Only check for collision if we have valid IDs to compare
-            const canCompare = fnId && callId;
-            const isMatch = canCompare && fnId === callId;
-            const isCollision = canCompare && fnId !== callId;
+            const isCollision = !isMatch;
 
             if (isCollision) {
               // Store name collision for later processing
@@ -459,13 +488,13 @@ export async function collectCalls(
               continue;
             }
 
-            if (!isMatch && !canCompare) {
-              // Can't determine - skip this call
+            if (!isMatch) {
+              // Symbols don't match - this is a different function with the same name
               continue;
             }
           }
 
-          // Process the call (either symbol matched or no symbol to compare)
+          // Process the call (symbol matched or no symbol to compare)
           const args = call.getArguments();
           const argsText = args.map((a: any) =>
             a ? a.getText() : 'undefined'
@@ -481,6 +510,7 @@ export async function collectCalls(
               'text:',
               argsText[0]
             );
+            alreadyConvertedCount++;
           } else {
             // Check if argument count matches parameter count
             if (args.length > paramNames.length) {
@@ -673,11 +703,11 @@ export async function collectCalls(
       const context = txt.substring(contextStart, contextEnd);
       
       // Check if this is the function definition, not a call
-      // Look for 'async functionName(' or 'functionName(' at start of statement
+      // Look for 'function functionName(' or 'async functionName(' or method declarations
       const beforeMatch = txt.substring(Math.max(0, idx - 20), idx);
-      const isFunctionDef = /\basync\s+$/.test(beforeMatch) || 
-                           /^\s*$/.test(beforeMatch) || 
-                           /[,{]\s*$/.test(beforeMatch);
+      const isFunctionDef = /\bfunction\s+$/.test(beforeMatch) ||
+                           /\basync\s+function\s+$/.test(beforeMatch) ||
+                           /\basync\s+$/.test(beforeMatch);
       
       if (isFunctionDef) {
         log('SKIPPING function definition at offset', idx, 'in', vf);
@@ -719,7 +749,7 @@ export async function collectCalls(
       argsText: c.argsText,
       reason: c.reason,
     }));
-  log('confirmed call count:', confirmed.length, 'fuzzy count:', fuzzy.length);
+  log('confirmed call count:', confirmed.length, 'fuzzy count:', fuzzy.length, 'already-converted:', alreadyConvertedCount);
   try {
     log('confirmed details:', JSON.stringify(safeSerial(confirmed), null, 2));
     log('fuzzy details:', JSON.stringify(safeSerial(fuzzy), null, 2));
@@ -728,5 +758,5 @@ export async function collectCalls(
     log('fuzzy examples:', fuzzy.slice(0, 10));
   }
 
-  return { confirmed, fuzzy, shouldAbort: false };
+  return { confirmed, fuzzy, shouldAbort: false, alreadyConvertedCount };
 }

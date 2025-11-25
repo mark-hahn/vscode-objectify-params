@@ -119,7 +119,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       resolvedTarget,
       paramNames,
       originalEditor,
-      originalSelection
+      originalSelection,
+      filePath
     );
 
     if (callCollection.shouldAbort) {
@@ -131,6 +132,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
     const confirmed = callCollection.confirmed;
     let fuzzy = callCollection.fuzzy;
+    const alreadyConvertedCount = callCollection.alreadyConvertedCount || 0;
 
     // Get show previews setting early as it's used in multiple places
     const cfg = vscode.workspace.getConfiguration('objectifyParams');
@@ -138,6 +140,14 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     const highlightDelay = (cfg.get('highlightDelay') as number) ?? 1000;
 
     if (confirmed.length === 0 && fuzzy.length === 0) {
+      // Check if we found calls but they were all already converted
+      if (alreadyConvertedCount > 0) {
+        void vscode.window.showInformationMessage(
+          `Objectify Params: All ${alreadyConvertedCount} call(s) already use object parameter syntax.`
+        );
+        return;
+      }
+
       log('No calls found, converting function signature only');
 
       // Get types and build the converted signature
@@ -275,6 +285,49 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         return `${exprText}({ ${props} })`;
       };
       log('=== CONFIRMED-ONLY PATH: About to apply', confirmed.length, 'edits ===');
+      
+      // Sort edits by start position to check for overlaps
+      const sortedConfirmed = [...confirmed].sort((a, b) => a.start - b.start);
+      for (let i = 0; i < sortedConfirmed.length - 1; i++) {
+        const curr = sortedConfirmed[i];
+        const next = sortedConfirmed[i + 1];
+        if (curr.end > next.start) {
+          log('WARNING: OVERLAPPING EDITS DETECTED!');
+          log('  Edit', i, ':', curr.filePath, 'offsets', curr.start, '-', curr.end);
+          log('  Edit', i + 1, ':', next.filePath, 'offsets', next.start, '-', next.end);
+          log('  Overlap:', curr.end - next.start, 'characters');
+        }
+      }
+      
+      // Build the function signature edit first (before document is modified)
+      const paramTypeText = parse.extractParameterTypes(
+        params,
+        paramNames,
+        sourceFile,
+        isRestParameter,
+        restTupleElements
+      );
+      const isTypeScript =
+        sourceFile.getFilePath().endsWith('.ts') ||
+        sourceFile.getFilePath().endsWith('.tsx');
+      const newFnText = text.transformFunctionText(
+        originalFunctionText,
+        params,
+        paramNames,
+        paramTypeText,
+        isTypeScript,
+        isRestParameter
+      );
+      
+      // Add function signature edit to the same WorkspaceEdit
+      const funcUri = vscode.Uri.file(filePath);
+      const funcDoc = await vscode.workspace.openTextDocument(funcUri);
+      const funcStartPos = funcDoc.positionAt(targetStart);
+      const funcEndPos = funcDoc.positionAt(targetEnd);
+      edit.replace(funcUri, new vscode.Range(funcStartPos, funcEndPos), newFnText);
+      log('Added function signature edit at offsets', targetStart, '-', targetEnd);
+      
+      // Add all call edits
       for (const c of confirmed) {
         const uri = vscode.Uri.file(c.filePath);
         const doc = await vscode.workspace.openTextDocument(uri);
@@ -298,41 +351,20 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         'file(s) - files are marked dirty, user can save manually'
       );
 
-      const paramTypeText = parse.extractParameterTypes(
-        params,
-        paramNames,
-        sourceFile,
-        isRestParameter,
-        restTupleElements
-      );
-
-      const isTypeScript =
-        sourceFile.getFilePath().endsWith('.ts') ||
-        sourceFile.getFilePath().endsWith('.tsx');
-      const newFnText = text.transformFunctionText(
-        originalFunctionText,
-        params,
-        paramNames,
-        paramTypeText,
-        isTypeScript,
-        isRestParameter
-      );
-
+      // Highlight the converted function signature
       try {
-        await text.applyFunctionEditAndHighlight(
-          sourceFile,
-          originalFunctionText,
-          newFnText,
+        await text.highlightConvertedFunction(
+          filePath,
           targetStart,
-          targetEnd,
+          newFnText,
           originalEditor,
           originalSelection,
-          highlightDelay,
-          confirmed.length
+          highlightDelay
         );
       } catch (e) {
-        log('error applying function text edit', e);
+        log('error highlighting function', e);
       }
+      
       if (confirmed.length > 0) {
         void vscode.window.showInformationMessage(
           `Objectify Params: Converted ${confirmed.length} call(s) and updated function.`

@@ -68,25 +68,23 @@ export async function showFunctionConversionDialog(
         );
       });
 
-      // Calculate the signature range (up to the opening brace)
-      let parenDepth = 0;
+      // Calculate the signature range in the CONVERTED function (up to the opening brace or line end)
       let signatureEnd = 0;
-      for (let i = 0; i < newFunctionText.length; i++) {
-        if (newFunctionText[i] === '(') parenDepth++;
-        if (newFunctionText[i] === ')') {
-          parenDepth--;
-          if (parenDepth === 0) {
-            const remaining = newFunctionText.substring(i + 1);
-            const braceIdx = remaining.indexOf('{');
-            signatureEnd = braceIdx >= 0 ? i + 1 + braceIdx : i + 1;
-            break;
-          }
-        }
+      const braceIdx = newFunctionText.indexOf('{');
+      const newlineIdx = newFunctionText.indexOf('\n');
+      
+      if (braceIdx >= 0 && (newlineIdx < 0 || braceIdx < newlineIdx)) {
+        // Function on one line: highlight up to the opening brace
+        signatureEnd = braceIdx;
+      } else if (newlineIdx >= 0) {
+        // Multi-line function: highlight only the first line
+        signatureEnd = newlineIdx;
+      } else {
+        // No brace or newline found: highlight the whole thing
+        signatureEnd = newFunctionText.length;
       }
-      if (signatureEnd === 0) signatureEnd = newFunctionText.indexOf('{');
-      if (signatureEnd <= 0) signatureEnd = newFunctionText.length;
 
-      const newSignatureEndPos =
+      const convertedSignatureEndPos =
         idx >= 0
           ? doc.positionAt(idx + signatureEnd)
           : doc.positionAt(targetStart + signatureEnd);
@@ -101,7 +99,7 @@ export async function showFunctionConversionDialog(
 
       // Show green highlight on the function signature only
       editor.setDecorations(greenDecoration, [
-        new vscode.Range(startPos, newSignatureEndPos),
+        new vscode.Range(startPos, convertedSignatureEndPos),
       ]);
 
       // Show confirmation dialog
