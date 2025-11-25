@@ -192,8 +192,46 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     if (fuzzy.length === 0 && confirmed.length > 0) {
       let aborted = false;
 
-      // Check if monitor conversions is enabled (already retrieved above)
+      // Show function conversion dialog if monitoring is enabled
       if (monitorConversions) {
+        // Build the converted function text for preview
+        const isTypeScript =
+          sourceFile.getFilePath().endsWith('.ts') ||
+          sourceFile.getFilePath().endsWith('.tsx');
+        const paramTypeText = parse.extractParameterTypes(
+          params,
+          paramNames,
+          sourceFile,
+          isRestParameter,
+          restTupleElements
+        );
+        const newFnText = text.transformFunctionText(
+          originalFunctionText,
+          params,
+          paramNames,
+          paramTypeText,
+          isTypeScript,
+          isRestParameter
+        );
+
+        aborted = await dialogs.showFunctionConversionDialog(
+          filePath,
+          targetStart,
+          targetEnd,
+          originalFunctionText,
+          newFnText,
+          originalEditor,
+          originalSelection
+        );
+
+        if (aborted) {
+          void vscode.window.showInformationMessage(
+            'Objectify Params: Operation cancelled — no changes made.'
+          );
+          return;
+        }
+
+        // Now show confirmed call monitoring
         aborted = await dialogs.monitorConfirmedCalls(
           confirmed,
           confirmed.length,
