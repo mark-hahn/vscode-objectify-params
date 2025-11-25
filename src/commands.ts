@@ -61,20 +61,44 @@ async function monitorConfirmedCalls(
 
         const repl = buildReplacement(c.exprText, c.argsText);
 
-        // Show green highlight immediately (before dialog)
+        // Apply the edit temporarily to show preview
+        const priorSelections = editor.selections.slice();
+        const priorVisibleRanges = editor.visibleRanges.slice();
+        
+        await editor.edit((editBuilder) => {
+          editBuilder.replace(new vscode.Range(startPos, endPos), repl);
+        });
+
+        // Show green highlight on the converted code
+        const newEndPos = doc.positionAt(c.start + repl.length);
         editor.setDecorations(greenDecoration, [
-          new vscode.Range(startPos, endPos),
+          new vscode.Range(startPos, newEndPos),
         ]);
 
-        // Show dialog while green highlight is visible
+        // Show dialog while preview is visible
         const choice = await vscode.window.showInformationMessage(
           `Objectify Params: Processed function call ${callIdx} of ${totalCalls}.`,
           { modal: true },
           'Next'
         );
 
-        // Clear green highlight immediately after dialog closes
+        // Undo the preview edit
+        await vscode.commands.executeCommand('undo');
+
+        // Clear green highlight after undo
         editor.setDecorations(greenDecoration, []);
+
+        // Restore editor state
+        try {
+          editor.selections = priorSelections;
+        } catch (e) {}
+        try {
+          if (priorVisibleRanges && priorVisibleRanges.length)
+            editor.revealRange(
+              priorVisibleRanges[0],
+              vscode.TextEditorRevealType.Default
+            );
+        } catch (e) {}
 
         if (choice === undefined) {
           yellowDecoration.dispose();
@@ -91,7 +115,7 @@ async function monitorConfirmedCalls(
           return true; // aborted
         }
 
-        // No preview after dialog - continue to next call
+        // Continue to next call
       }
     } catch (e) {
       log('Error showing monitor preview:', e);
@@ -652,11 +676,13 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         }
       }
 
-      const newFnText = transformFunctionText(
+      const newFnText = text.transformFunctionText(
         originalFunctionText,
+        params,
         paramNames,
         paramTypeText,
-        isTypeScript
+        isTypeScript,
+        isRestParameter
       );
 
       const edit = new vscode.WorkspaceEdit();
