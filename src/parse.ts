@@ -60,9 +60,10 @@ export function resolveSymbol(
       ? targetSym.getAliasedSymbol?.() || targetSym
       : targetSym);
 
-  // For object methods (Vue components, etc.) without symbols,
-  // we can still proceed using name-based matching
-  const canProceedWithoutSymbol = !resolvedTarget && !!fnName;
+  // Can proceed without a resolved symbol if:
+  // 1. Function has a name (name-based matching for calls)
+  // 2. Function is anonymous (no calls to find, just converting the definition)
+  const canProceedWithoutSymbol = !resolvedTarget;
 
   return {
     resolvedTarget,

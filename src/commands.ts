@@ -28,6 +28,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
     // Ensure current file is in the project
     let sourceFile = project.getSourceFile(filePath);
+    const wasNotInProject = !sourceFile;
+    
     if (!sourceFile) {
       sourceFile = project.createSourceFile(
         filePath,
@@ -47,6 +49,14 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
     const { targetFunction, targetVariableDeclaration, params, fnName } =
       functionResult;
+
+    // If file wasn't in the project, warn the user
+    if (wasNotInProject) {
+      void vscode.window.showInformationMessage(
+        `Objectify Params: File "${path.basename(filePath)}" not included in configured patterns. Current patterns: ${vscode.workspace.getConfiguration('objectifyParams').get('include') || '**/*.ts **/*.js'}`
+      );
+      return;
+    }
 
     // Validate function can be converted
     const isValid = await functions.validateFunction(targetFunction, params);
