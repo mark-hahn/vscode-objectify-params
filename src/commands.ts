@@ -257,6 +257,20 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     }
 
     if (!targetFunction) {
+      // Check object literal methods (e.g., Vue component methods)
+      const allNodes = sourceFile.getDescendantsOfKind(SyntaxKind.MethodDeclaration);
+      for (const method of allNodes) {
+        if (
+          method.getStart() <= cursorOffset &&
+          cursorOffset <= method.getEnd()
+        ) {
+          targetFunction = method;
+          break;
+        }
+      }
+    }
+
+    if (!targetFunction) {
       void vscode.window.showInformationMessage(
         'Objectify Params: Not on a function.'
       );
@@ -478,7 +492,12 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       (targetSym.getAliasedSymbol
         ? targetSym.getAliasedSymbol() || targetSym
         : targetSym);
-    if (!resolvedTarget) {
+    
+    // For object methods (Vue components, etc.) without symbols, 
+    // we can still proceed using name-based matching
+    const canProceedWithoutSymbol = !resolvedTarget && fnName;
+    
+    if (!resolvedTarget && !canProceedWithoutSymbol) {
       void vscode.window.showInformationMessage(
         'Objectify Params: This function cannot be converted — cannot resolve symbol for the selected function.'
       );
@@ -666,39 +685,61 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
         if (resolvedCalled) {
           try {
-            const fnId = resolvedTarget.getFullyQualifiedName
-              ? resolvedTarget.getFullyQualifiedName()
-              : resolvedTarget.getEscapedName &&
-                resolvedTarget.getEscapedName();
-            const callId = resolvedCalled.getFullyQualifiedName
-              ? resolvedCalled.getFullyQualifiedName()
-              : resolvedCalled.getEscapedName &&
-                resolvedCalled.getEscapedName();
+            // Only compare symbols if we have a resolved target
+            if (resolvedTarget) {
+              const fnId = resolvedTarget.getFullyQualifiedName
+                ? resolvedTarget.getFullyQualifiedName()
+                : resolvedTarget.getEscapedName &&
+                  resolvedTarget.getEscapedName();
+              const callId = resolvedCalled.getFullyQualifiedName
+                ? resolvedCalled.getFullyQualifiedName()
+                : resolvedCalled.getEscapedName &&
+                  resolvedCalled.getEscapedName();
 
-            // Only check for collision if we have valid IDs to compare
-            const canCompare = fnId && callId;
-            const isMatch = canCompare && fnId === callId;
-            const isCollision = canCompare && fnId !== callId;
+              // Only check for collision if we have valid IDs to compare
+              const canCompare = fnId && callId;
+              const isMatch = canCompare && fnId === callId;
+              const isCollision = canCompare && fnId !== callId;
 
-            if (isMatch || !canCompare) {
-              const args = call.getArguments();
-              const argsText = args.map((a: any) =>
-                a ? a.getText() : 'undefined'
+              if (isCollision) {
+                // Store name collision for later processing
+                fuzzy.push({
+                  filePath: sf.getFilePath(),
+                  start: call.getStart(),
+                  end: call.getEnd(),
+                  exprText: expr.getText(),
+                  argsText: [],
+                  reason: 'name-collision',
+                  score: 1,
+                });
+                continue;
+              }
+              
+              if (!isMatch && !canCompare) {
+                // Can't determine - skip this call
+                continue;
+              }
+            }
+            
+            // Process the call (either symbol matched or no symbol to compare)
+            const args = call.getArguments();
+            const argsText = args.map((a: any) =>
+              a ? a.getText() : 'undefined'
+            );
+            if (
+              argsText.length === 1 &&
+              typeof argsText[0] === 'string' &&
+              argsText[0].trim().startsWith('{')
+            ) {
+              log(
+                'skipping already-object call at',
+                sf.getFilePath(),
+                'text:',
+                argsText[0]
               );
-              if (
-                argsText.length === 1 &&
-                typeof argsText[0] === 'string' &&
-                argsText[0].trim().startsWith('{')
-              ) {
-                log(
-                  'skipping already-object call at',
-                  sf.getFilePath(),
-                  'text:',
-                  argsText[0]
-                );
-              } else {
-                // Check if argument count matches parameter count
-                if (args.length > paramNames.length) {
+            } else {
+              // Check if argument count matches parameter count
+              if (args.length > paramNames.length) {
                   // More args than params - would lose data, must be fuzzy
                   log(
                     'too many arguments:',
@@ -729,19 +770,6 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
                   });
                 }
               }
-            } else if (isCollision) {
-              // Store name collision for later processing
-              fuzzy.push({
-                filePath: sf.getFilePath(),
-                start: call.getStart(),
-                end: call.getEnd(),
-                exprText: expr.getText(),
-                argsText: [],
-                reason: 'name-collision',
-                score: 1,
-              });
-              continue;
-            }
           } catch (e) {
             log('Error during symbol comparison in', sf.getFilePath(), e);
             
@@ -801,13 +829,13 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       }
     }
 
-    // Also search .vue files in workspace for template calls (simple textual search)
+    // Also search .vue and .svelte files in workspace for template calls (simple textual search)
     const cfg = vscode.workspace.getConfiguration('objectifyParams');
     const excludeStr = (cfg.get('exclude') as string) || '**/node_modules/**';
     const excludePatterns = excludeStr.split(/\s+/).filter(Boolean);
-    const vuePatterns = ['**/*.vue'];
+    const templatePatterns = ['**/*.vue', '**/*.svelte'];
     let vueFilesRel: string[] = [];
-    for (const p of vuePatterns) {
+    for (const p of templatePatterns) {
       try {
         vueFilesRel = vueFilesRel.concat(
           glob.sync(p, {
@@ -826,15 +854,13 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       let m: RegExpExecArray | null;
       while ((m = re.exec(txt)) !== null) {
         const idx = m.index;
-        const before = txt.slice(0, idx);
-        const line = before.split('\n').length;
         fuzzy.push({
           filePath: vf,
           rangeStart: idx,
           rangeEnd: idx + fnName.length,
           text: txt.substr(idx, 200),
-          reason: 'vue-template',
-          score: 9,
+          reason: 'unresolved',
+          score: 5,
           argsText: null,
         });
       }
