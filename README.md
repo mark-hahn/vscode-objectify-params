@@ -55,7 +55,7 @@ Access settings via **File > Preferences > Settings** and search for "Objectify 
 - **Default**: `"**/node_modules/**"`
 - Space-separated glob patterns to exclude
 
-#### `objectifyParams.monitorConversions`
+#### `objectifyParams.showPreviews`
 - **Type**: `boolean`
 - **Default**: `false`
 - Show preview dialog for every call conversion (including confirmed safe calls)
@@ -97,7 +97,7 @@ Access settings via **File > Preferences > Settings** and search for "Objectify 
 
 ### Tips
 
-- **Monitor Mode**: Enable `monitorConversions` to review every conversion step-by-step
+- **Show Previews**: Enable `showPreviews` to review every conversion step-by-step
 - **Fast Mode**: Set `highlightDelay` to `0` for instant dialogs without preview delays
 - **Selective Scanning**: Adjust `include` patterns to limit scope for faster processing
 - **Undo Support**: All changes are applied through VS Code's undo system

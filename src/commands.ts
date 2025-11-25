@@ -122,9 +122,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     const confirmed = callCollection.confirmed;
     let fuzzy = callCollection.fuzzy;
 
-    // Get monitor conversions setting early as it's used in multiple places
+    // Get show previews setting early as it's used in multiple places
     const cfg = vscode.workspace.getConfiguration('objectifyParams');
-    const monitorConversions = cfg.get('monitorConversions') as boolean;
+    const showPreviews = cfg.get('showPreviews') as boolean;
     const highlightDelay = (cfg.get('highlightDelay') as number) ?? 1000;
 
     if (confirmed.length === 0 && fuzzy.length === 0) {
@@ -192,8 +192,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     if (fuzzy.length === 0 && confirmed.length > 0) {
       let aborted = false;
 
-      // Show function conversion dialog if monitoring is enabled
-      if (monitorConversions) {
+      // Show function conversion dialog if previews are enabled
+      if (showPreviews) {
         // Build the converted function text for preview
         const isTypeScript =
           sourceFile.getFilePath().endsWith('.ts') ||
@@ -353,14 +353,14 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     let aborted = false;
 
     log(
-      'monitorConversions:',
-      monitorConversions,
+      'showPreviews:',
+      showPreviews,
       'confirmed.length:',
       confirmed.length
     );
 
-    // Show function conversion dialog if monitoring is enabled
-    if (monitorConversions && (confirmed.length > 0 || fuzzy.length > 0)) {
+    // Show function conversion dialog if previews are enabled
+    if (showPreviews && (confirmed.length > 0 || fuzzy.length > 0)) {
       // Build the converted function text for preview
       const isTypeScript =
         sourceFile.getFilePath().endsWith('.ts') ||
@@ -461,9 +461,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       );
     }
 
-    // If monitoring, show preview for confirmed calls AFTER fuzzy calls
-    if (monitorConversions && confirmed.length > 0 && !aborted) {
-      log('Entering confirmed monitoring block');
+    // If previews enabled, show preview for confirmed calls AFTER fuzzy calls
+    if (showPreviews && confirmed.length > 0 && !aborted) {
+      log('Entering confirmed preview block');
       aborted = await dialogs.monitorConfirmedCalls(
         confirmed,
         totalCalls,

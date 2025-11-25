@@ -45,7 +45,7 @@
           "default": "**/node_modules/**",
           "description": "Space-separated glob patterns of files/folders to exclude when scanning."
         },
-        "objectifyParams.monitorConversions": {
+        "objectifyParams.showPreviews": {
           "type": "boolean",
           "default": false,
           "description": "Show a preview dialog for every call conversion, including confirmed valid calls."
