@@ -66,7 +66,7 @@ async function monitorConfirmedCalls(
 
         // Show dialog while green highlight is visible
         const choice = await vscode.window.showInformationMessage(
-          `Objectify Params: Processing function call ${callIdx} of ${totalCalls}.`,
+          `Objectify Params: Processed function call ${callIdx} of ${totalCalls}.`,
           { modal: true },
           'Next'
         );
@@ -743,19 +743,44 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
               continue;
             }
           } catch (e) {
-            const args = call.getArguments();
-            const argsText = args.map((a: any) =>
-              a ? a.getText() : 'undefined'
-            );
-            fuzzy.push({
-              filePath: sf.getFilePath(),
-              start: call.getStart(),
-              end: call.getEnd(),
-              exprText: expr.getText(),
-              argsText,
-              reason: 'symbol-compare-error',
-              score: 5,
-            });
+            log('Error during symbol comparison in', sf.getFilePath(), e);
+            
+            // Show error and abort - cannot safely parse this file
+            const doc = await vscode.workspace.openTextDocument(sf.getFilePath());
+            const callStartPos = doc.positionAt(call.getStart());
+            const callEndPos = doc.positionAt(call.getEnd());
+
+            await vscode.window.showTextDocument(doc, { preview: true });
+            const tempEditor = vscode.window.activeTextEditor;
+
+            if (tempEditor) {
+              const errorDecoration = vscode.window.createTextEditorDecorationType({
+                backgroundColor: 'rgba(255,100,100,0.3)',
+                border: '1px solid rgba(255,100,100,0.8)',
+              });
+              tempEditor.setDecorations(errorDecoration, [
+                new vscode.Range(callStartPos, callEndPos),
+              ]);
+
+              await vscode.window.showWarningMessage(
+                `Objectify Params: Cannot convert function.\n\nCannot parse the file. Check for errors. Operation will be cancelled.`,
+                { modal: true },
+                'OK'
+              );
+
+              errorDecoration.dispose();
+            }
+
+            // Restore original editor
+            if (originalEditor && originalSelection) {
+              await vscode.window.showTextDocument(originalEditor.document, {
+                selection: originalSelection,
+                preserveFocus: false,
+              });
+            }
+
+            log('Aborting conversion due to parse error');
+            return;
           }
         } else {
           const args = call.getArguments();
