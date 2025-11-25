@@ -57,7 +57,7 @@ export function resolveSymbol(
   const resolvedTarget =
     targetSym &&
     (targetSym.getAliasedSymbol
-      ? targetSym.getAliasedSymbol() || targetSym
+      ? targetSym.getAliasedSymbol?.() || targetSym
       : targetSym);
 
   // For object methods (Vue components, etc.) without symbols,
@@ -391,12 +391,20 @@ export async function collectCalls(
         continue;
       }
 
-      const calledSym = expr.getSymbol && expr.getSymbol();
-      const resolvedCalled =
-        calledSym &&
-        (calledSym.getAliasedSymbol
-          ? calledSym.getAliasedSymbol() || calledSym
-          : calledSym);
+      let calledSym;
+      let resolvedCalled;
+      try {
+        calledSym = expr.getSymbol && expr.getSymbol();
+        resolvedCalled =
+          calledSym &&
+          (calledSym.getAliasedSymbol
+            ? calledSym.getAliasedSymbol?.() || calledSym
+            : calledSym);
+      } catch (e) {
+        log('Error resolving called symbol:', e);
+        calledSym = null;
+        resolvedCalled = null;
+      }
 
       if (looksLikeCall) {
         try {
@@ -496,6 +504,14 @@ export async function collectCalls(
             } else {
               // args.length <= paramNames.length - safe to convert
               // Missing args will become undefined properties
+              log('CONFIRMED CALL ADDED:', {
+                file: sf.getFilePath(),
+                start: call.getStart(),
+                end: call.getEnd(),
+                exprText: expr.getText(),
+                argsText,
+                callText: call.getText()
+              });
               confirmed.push({
                 filePath: sf.getFilePath(),
                 start: call.getStart(),
@@ -581,12 +597,55 @@ export async function collectCalls(
   }
   vueFilesRel = Array.from(new Set(vueFilesRel));
   const vueFiles = vueFilesRel.map((f) => path.join(workspaceRoot, f));
+  
+  // Normalize file paths for comparison and collect existing ranges
+  const normalizeFilePath = (fp: string) => fp.replace(/\\/g, '/').toLowerCase();
+  const existingRanges: Array<{file: string, start: number, end: number}> = [];
+  for (const f of fuzzy) {
+    if (f.start !== undefined && f.end !== undefined) {
+      existingRanges.push({
+        file: normalizeFilePath(f.filePath),
+        start: f.start,
+        end: f.end
+      });
+    }
+  }
+  
   for (const vf of vueFiles) {
     const txt = fs.readFileSync(vf, 'utf8');
     const re = new RegExp(fnName + '\\s*\\(', 'g');
     let m: RegExpExecArray | null;
     while ((m = re.exec(txt)) !== null) {
       const idx = m.index;
+      const contextStart = Math.max(0, idx - 50);
+      const contextEnd = Math.min(txt.length, idx + 100);
+      const context = txt.substring(contextStart, contextEnd);
+      
+      // Check if this is the function definition, not a call
+      // Look for 'async functionName(' or 'functionName(' at start of statement
+      const beforeMatch = txt.substring(Math.max(0, idx - 20), idx);
+      const isFunctionDef = /\basync\s+$/.test(beforeMatch) || 
+                           /^\s*$/.test(beforeMatch) || 
+                           /[,{]\s*$/.test(beforeMatch);
+      
+      if (isFunctionDef) {
+        log('SKIPPING function definition at offset', idx, 'in', vf);
+        continue;
+      }
+      
+      // Check if overlaps with any existing range (allowing for slight offset differences)
+      const normalizedVf = normalizeFilePath(vf);
+      const isDuplicate = existingRanges.some(r => 
+        r.file === normalizedVf && 
+        Math.abs(r.start - idx) < 20 // Within 20 chars is likely the same call
+      );
+      
+      if (isDuplicate) {
+        log('SKIPPING duplicate (already found by ts-morph) at offset', idx, 'in', vf);
+        continue;
+      }
+      
+      log('REGEX MATCH in', vf, 'at offset', idx, 'context:', context);
       fuzzy.push({
         filePath: vf,
         rangeStart: idx,

@@ -159,7 +159,13 @@ export async function applyFunctionEditAndHighlight(
   highlightDelay: number,
   convertedCount: number
 ): Promise<void> {
-  const uri = vscode.Uri.file(sourceFile.getFilePath());
+  const filePath = sourceFile.getFilePath();
+  log('=== CONVERTING FUNCTION SIGNATURE ===');
+  log('  file:', filePath);
+  log('  offsets:', targetStart, '-', targetEnd);
+  log('  ---original---\n  ' + originalFunctionText);
+  log('  ---new---\n  ' + newFnText);
+  const uri = vscode.Uri.file(filePath);
   const doc = await vscode.workspace.openTextDocument(uri);
   const full = doc.getText();
   const idx = full.indexOf(originalFunctionText);

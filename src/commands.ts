@@ -264,6 +264,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           .join(', ');
         return `${exprText}({ ${props} })`;
       };
+      log('=== CONFIRMED-ONLY PATH: About to apply', confirmed.length, 'edits ===');
       for (const c of confirmed) {
         const uri = vscode.Uri.file(c.filePath);
         const doc = await vscode.workspace.openTextDocument(uri);
@@ -272,8 +273,11 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         const endPos = doc.positionAt(c.end);
         const orig = doc.getText().slice(c.start, c.end);
         const repl = buildReplacement(c.exprText, c.argsText);
-        log('preparing replace in', c.filePath);
-        log('---orig---\n' + orig + '\n---repl---\n' + repl);
+        log('EDIT #' + (confirmed.indexOf(c) + 1), ':', c.filePath, 'offsets', c.start, '-', c.end);
+        log('  exprText:', c.exprText);
+        log('  argsText:', JSON.stringify(c.argsText));
+        log('  ---orig---\n  ' + orig);
+        log('  ---repl---\n  ' + repl);
         edit.replace(uri, new vscode.Range(startPos, endPos), repl);
       }
       const ok = await vscode.workspace.applyEdit(edit);
@@ -535,6 +539,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     }
 
     const replAllMap = new Map<string, string>();
+    log('=== MIXED PATH: About to apply', allCandidates.length, 'edits ===');
     for (const c of allCandidates) {
       if (
         c.filePath &&
@@ -546,8 +551,13 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         docsToSaveAll.set(c.filePath, doc);
         const startP = doc.positionAt(c.start);
         const endP = doc.positionAt(c.end);
+        const orig = doc.getText().slice(c.start, c.end);
         const replAll = buildReplacementAll(c.exprText, c.argsText);
-        log('scheduling replace (all) in', c.filePath, 'range', c.start, c.end);
+        log('EDIT #' + (allCandidates.indexOf(c) + 1), ':', c.filePath, 'offsets', c.start, '-', c.end);
+        log('  exprText:', c.exprText);
+        log('  argsText:', JSON.stringify(c.argsText));
+        log('  ---orig---\n  ' + orig);
+        log('  ---repl---\n  ' + replAll);
         editAll.replace(uri, new vscode.Range(startP, endP), replAll);
       } else if (c.filePath && typeof c.rangeStart === 'number') {
         const uri = vscode.Uri.file(c.filePath);
