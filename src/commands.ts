@@ -59,28 +59,20 @@ async function monitorConfirmedCalls(
 
         const repl = buildReplacement(c.exprText, c.argsText);
 
-        if (highlightDelay === 0) {
-          // Show green preview immediately
-          await editor.edit((editBuilder) => {
-            editBuilder.replace(new vscode.Range(startPos, endPos), repl);
-          });
-          const newEndPos = doc.positionAt(c.start + repl.length);
-          editor.setDecorations(greenDecoration, [
-            new vscode.Range(startPos, newEndPos),
-          ]);
-        } else {
-          // Show original in yellow
-          editor.setDecorations(yellowDecoration, [
-            new vscode.Range(startPos, endPos),
-          ]);
-        }
+        // Show green highlight immediately (before dialog)
+        editor.setDecorations(greenDecoration, [
+          new vscode.Range(startPos, endPos),
+        ]);
 
-        // Show dialog immediately (while highlight is visible)
+        // Show dialog while green highlight is visible
         const choice = await vscode.window.showInformationMessage(
           `Objectify Params: Processing function call ${callIdx} of ${totalCalls}.`,
           { modal: true },
           'Next'
         );
+
+        // Clear green highlight immediately after dialog closes
+        editor.setDecorations(greenDecoration, []);
 
         if (choice === undefined) {
           yellowDecoration.dispose();
@@ -94,33 +86,10 @@ async function monitorConfirmedCalls(
               preserveFocus: false,
             });
           }
-          if (highlightDelay === 0) {
-            await vscode.commands.executeCommand('undo');
-          }
           return true; // aborted
         }
 
-        if (highlightDelay === 0) {
-          editor.setDecorations(greenDecoration, []);
-          await vscode.commands.executeCommand('undo');
-        } else {
-          // Clear yellow, show green preview, then wait
-          editor.setDecorations(yellowDecoration, []);
-
-          await editor.edit((editBuilder) => {
-            editBuilder.replace(new vscode.Range(startPos, endPos), repl);
-          });
-
-          const newEndPos = doc.positionAt(c.start + repl.length);
-          editor.setDecorations(greenDecoration, [
-            new vscode.Range(startPos, newEndPos),
-          ]);
-
-          await new Promise((r) => setTimeout(r, highlightDelay));
-
-          await vscode.commands.executeCommand('undo');
-          editor.setDecorations(greenDecoration, []);
-        }
+        // No preview after dialog - continue to next call
       }
     } catch (e) {
       log('Error showing monitor preview:', e);
@@ -729,9 +698,10 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
                 );
               } else {
                 // Check if argument count matches parameter count
-                if (args.length !== paramNames.length) {
+                if (args.length > paramNames.length) {
+                  // More args than params - would lose data, must be fuzzy
                   log(
-                    'argument count mismatch:',
+                    'too many arguments:',
                     args.length,
                     'args vs',
                     paramNames.length,
@@ -744,43 +714,19 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
                     end: call.getEnd(),
                     exprText: expr.getText(),
                     argsText,
-                    reason: 'arg-count-mismatch',
+                    reason: 'too-many-args',
                     score: 3,
                   });
-                } else if (args.length === 0) {
-                  fuzzy.push({
+                } else {
+                  // args.length <= paramNames.length - safe to convert
+                  // Missing args will become undefined properties
+                  confirmed.push({
                     filePath: sf.getFilePath(),
                     start: call.getStart(),
                     end: call.getEnd(),
                     exprText: expr.getText(),
                     argsText,
-                    reason: 'no-args',
-                    score: 10,
                   });
-                } else {
-                  const firstArgText = (argsText[0] || '').trim();
-                  if (
-                    firstArgText === 'undefined' ||
-                    firstArgText === 'void 0'
-                  ) {
-                    fuzzy.push({
-                      filePath: sf.getFilePath(),
-                      start: call.getStart(),
-                      end: call.getEnd(),
-                      exprText: expr.getText(),
-                      argsText,
-                      reason: 'undefined-arg',
-                      score: 10,
-                    });
-                  } else {
-                    confirmed.push({
-                      filePath: sf.getFilePath(),
-                      start: call.getStart(),
-                      end: call.getEnd(),
-                      exprText: expr.getText(),
-                      argsText,
-                    });
-                  }
                 }
               }
             } else if (isCollision) {
@@ -1300,102 +1246,79 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       const willLoseArgs = argCount > paramNames.length;
 
       let choice: string | undefined;
+      
+      // Build message based on reason
+      let message = `Objectify Params: Processing function call ${callIdx} of ${totalCalls}.\n\n`;
+      
       if (willLoseArgs) {
-        // Change to red (won't convert)
-        let currentEditor = vscode.window.activeTextEditor;
-        if (currentEditor && startPos && endPos) {
-          currentEditor.setDecorations(highlightDecoration, []);
-          currentEditor.setDecorations(redDecoration, [
-            new vscode.Range(startPos, endPos),
-          ]);
-        }
-
-        choice = await vscode.window.showWarningMessage(
-          `Objectify Params: Processing function call ${callIdx} of ${totalCalls}.\n\n` +
-            `Argument count mismatch. This call has ${argCount} argument(s) but the function has ${paramNames.length} parameter(s). ` +
-            `Converting would lose ${
-              argCount - paramNames.length
-            } argument(s): ` +
-            `${candidate.argsText?.slice(paramNames.length).join(', ')}. ` +
-            `This function cannot be converted safely.`,
-          { modal: true },
-          'Skip This Call'
-        );
-
-        currentEditor = vscode.window.activeTextEditor;
-        if (currentEditor) {
-          currentEditor.setDecorations(highlightDecoration, []);
-          currentEditor.setDecorations(redDecoration, []);
-        }
-
-        if (choice === undefined) {
-          highlightDecoration.dispose();
-          greenDecoration.dispose();
-          redDecoration.dispose();
-          void vscode.window.showInformationMessage(
-            'Objectify Params: Operation cancelled — no changes made.'
-          );
-          if (originalEditor && originalSelection)
-            await vscode.window.showTextDocument(originalEditor.document, {
-              selection: originalSelection,
-              preserveFocus: false,
-            });
-          return;
-        }
-
-        // Skip this call and continue to next fuzzy
-        continue;
+        message += `This call has more arguments than the function has parameters and data would be lost. Should it be converted?`;
+      } else if (candidate.reason === 'too-many-args') {
+        message += `This call has more arguments than the function has parameters and data would be lost. Should it be converted?`;
       } else {
-        choice = await vscode.window.showInformationMessage(
-          `Objectify Params: Processing function call ${callIdx} of ${totalCalls}.\n\nIs this a call to the correct function? Should it be converted?`,
-          { modal: true },
-          'Convert',
-          'Skip'
+        message += `Is this a call to the correct function? Should it be converted?`;
+      }
+
+      choice = await vscode.window.showInformationMessage(
+        message,
+        { modal: true },
+        'Convert',
+        'Skip'
+      );
+
+      // Handle cancel (×) button - abort entire conversion
+      if (choice === undefined) {
+        log('User clicked cancel (×) in validation dialog');
+        highlightDecoration.dispose();
+        greenDecoration.dispose();
+        redDecoration.dispose();
+        void vscode.window.showInformationMessage(
+          'Objectify Params: Operation cancelled — no changes made.'
         );
-
-        // Handle cancel (×) button - abort entire conversion
-        if (choice === undefined) {
-          log('User clicked cancel (×) in validation dialog');
-          highlightDecoration.dispose();
-          greenDecoration.dispose();
-          redDecoration.dispose();
-          void vscode.window.showInformationMessage(
-            'Objectify Params: Operation cancelled — no changes made.'
-          );
-          if (originalEditor && originalSelection) {
-            await vscode.window.showTextDocument(originalEditor.document, {
-              selection: originalSelection,
-              preserveFocus: false,
-            });
-          }
-          return;
+        if (originalEditor && originalSelection) {
+          await vscode.window.showTextDocument(originalEditor.document, {
+            selection: originalSelection,
+            preserveFocus: false,
+          });
         }
+        return;
+      }
 
-        // Change color based on choice
-        const currentEditor = vscode.window.activeTextEditor;
-        if (currentEditor && startPos && endPos) {
-          // Clear previous decorations
-          currentEditor.setDecorations(highlightDecoration, []);
-          currentEditor.setDecorations(greenDecoration, []);
-          currentEditor.setDecorations(redDecoration, []);
+      // Change color based on choice
+      const currentEditor = vscode.window.activeTextEditor;
+      if (currentEditor && startPos && endPos) {
+        // Clear previous decorations
+        currentEditor.setDecorations(highlightDecoration, []);
+        currentEditor.setDecorations(greenDecoration, []);
+        currentEditor.setDecorations(redDecoration, []);
 
-          // Only show post-dialog preview if delay > 0 AND user chose Skip
-          if (highlightDelay > 0 && choice === 'Skip') {
+        // Show post-dialog preview if delay > 0
+        if (highlightDelay > 0) {
+          if (choice === 'Convert') {
+            // Green for will convert
+            currentEditor.setDecorations(greenDecoration, [
+              new vscode.Range(startPos, endPos),
+            ]);
+          } else {
             // Red for won't convert
             currentEditor.setDecorations(redDecoration, [
               new vscode.Range(startPos, endPos),
             ]);
-            await new Promise((r) => setTimeout(r, highlightDelay));
           }
+          await new Promise((r) => setTimeout(r, highlightDelay));
         }
+      }
 
-        if (choice !== 'Convert') {
-          if (currentEditor) {
-            currentEditor.setDecorations(redDecoration, []);
-          }
-          // Skip this call and continue with the rest
-          continue;
+      if (choice !== 'Convert') {
+        if (currentEditor) {
+          currentEditor.setDecorations(redDecoration, []);
         }
+        // Skip this call and continue with the rest
+        continue;
+      }
+
+      // Clear green decoration after delay
+      if (currentEditor) {
+        currentEditor.setDecorations(greenDecoration, []);
       }
 
       // User chose to convert this fuzzy call
