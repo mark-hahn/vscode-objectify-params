@@ -170,11 +170,6 @@ export async function createProjectFromConfig(
   return project;
 }
 
-export function resolveSymbol(node: any): any {
-  const sym = node.getSymbol ? node.getSymbol() : null;
-  return sym && sym.getAliasedSymbol ? sym.getAliasedSymbol() || sym : sym;
-}
-
 export function getSymbolName(symbol: any): string | null {
   if (!symbol) return null;
   return symbol.getFullyQualifiedName
