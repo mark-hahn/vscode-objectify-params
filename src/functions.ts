@@ -143,6 +143,14 @@ export function findTargetFunction(
     fnName = targetVariableDeclaration.getName();
   }
 
+  // Check if function is anonymous (no name found)
+  if (!fnName) {
+    void vscode.window.showInformationMessage(
+      'Objectify Params: Cannot convert anonymous functions.'
+    );
+    return null;
+  }
+
   return {
     targetFunction,
     targetVariableDeclaration,
