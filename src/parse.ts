@@ -590,7 +590,22 @@ export async function collectCalls(
           continue;
         }
         
-        if (args.length > paramNames.length) {
+        // If this is a property access (e.g., x.sendToWebview) and we couldn't resolve the symbol,
+        // it's likely a different function with the same name - treat as fuzzy
+        const isPropertyAccess = exprText !== fnName && (exprText.includes('.') || exprText.includes('['));
+        
+        if (isPropertyAccess) {
+          // Property access without symbol resolution - likely name collision
+          fuzzy.push({
+            filePath: sf.getFilePath(),
+            start: call.getStart(),
+            end: call.getEnd(),
+            exprText: expr.getText(),
+            argsText,
+            reason: 'unresolved-property-access',
+            score: 2,
+          });
+        } else if (args.length > paramNames.length) {
           // Too many args - must be fuzzy to avoid data loss
           fuzzy.push({
             filePath: sf.getFilePath(),
@@ -602,7 +617,7 @@ export async function collectCalls(
             score: 3,
           });
         } else {
-          // args.length <= paramNames.length - safe to auto-convert even without symbol resolution
+          // Direct call with safe arg count - safe to auto-convert
           log('CONFIRMED CALL ADDED (unresolved symbol but safe arg count):', {
             file: sf.getFilePath(),
             start: call.getStart(),
