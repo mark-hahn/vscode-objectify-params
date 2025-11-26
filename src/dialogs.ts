@@ -414,9 +414,9 @@ export async function reviewFuzzyCall(
       return 'abort';
     }
 
-    // Clear yellow decoration immediately after dialog closes
+    // Show green or red highlight based on user choice
     const currentEditor = vscode.window.activeTextEditor;
-    if (currentEditor) {
+    if (currentEditor && startPos && endPos) {
       currentEditor.setDecorations(highlightDecoration, []);
       currentEditor.setDecorations(greenDecoration, []);
       currentEditor.setDecorations(redDecoration, []);
@@ -517,8 +517,8 @@ export async function showFuzzyConversionPreview(
         repl = conversionResult.replacement;
       } else {
         // Regular call - use buildCallReplacement
-        if (!candidate.argsText || candidate.argsText.length < paramNames.length) {
-          return; // Can't preview
+        if (!candidate.argsText) {
+          return; // Can't preview - no arg info
         }
         
         startP = doc.positionAt(candidate.start);
