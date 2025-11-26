@@ -412,23 +412,7 @@ export async function collectCalls(
       }
 
       if (looksLikeCall) {
-        try {
-          const dbgArgs = call
-            .getArguments()
-            .map((a: any) => (a ? a.getText() : 'undefined'));
-          log('candidate call:', {
-            file: sf.getFilePath(),
-            exprText,
-            args: dbgArgs,
-            resolvedCalled: !!resolvedCalled,
-          });
-        } catch (e) {
-          log('candidate call (could not read args) ', {
-            file: sf.getFilePath(),
-            exprText,
-            resolvedCalled: !!resolvedCalled,
-          });
-        }
+
       }
 
       if (resolvedCalled) {
@@ -535,14 +519,6 @@ export async function collectCalls(
             } else {
               // args.length <= paramNames.length - safe to convert
               // Missing args will become undefined properties
-              log('CONFIRMED CALL ADDED:', {
-                file: sf.getFilePath(),
-                start: call.getStart(),
-                end: call.getEnd(),
-                exprText: expr.getText(),
-                argsText,
-                callText: call.getText()
-              });
               confirmed.push({
                 filePath: sf.getFilePath(),
                 start: call.getStart(),
@@ -749,14 +725,5 @@ export async function collectCalls(
       argsText: c.argsText,
       reason: c.reason,
     }));
-  log('confirmed call count:', confirmed.length, 'fuzzy count:', fuzzy.length, 'already-converted:', alreadyConvertedCount);
-  try {
-    log('confirmed details:', JSON.stringify(safeSerial(confirmed), null, 2));
-    log('fuzzy details:', JSON.stringify(safeSerial(fuzzy), null, 2));
-  } catch (e) {
-    log('confirmed examples:', confirmed.slice(0, 10));
-    log('fuzzy examples:', fuzzy.slice(0, 10));
-  }
-
   return { confirmed, fuzzy, shouldAbort: false, alreadyConvertedCount };
 }
