@@ -11,6 +11,81 @@ import * as dialogs from './dialogs';
 
 const { log } = utils.getLog('cmds');
 
+function normalizeFsPath(p?: string): string | undefined {
+  if (!p) return undefined;
+  const normalized = path.normalize(p);
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function splitInternalCalls(
+  calls: any[],
+  filePath: string,
+  targetStart: number,
+  targetEnd: number
+): { internal: any[]; external: any[] } {
+  const targetNormalized = normalizeFsPath(filePath);
+  const internal: any[] = [];
+  const external: any[] = [];
+  for (const call of calls) {
+    const callPathNormalized = normalizeFsPath(call.filePath);
+    if (
+      callPathNormalized &&
+      targetNormalized &&
+      callPathNormalized === targetNormalized &&
+      typeof call.start === 'number' &&
+      typeof call.end === 'number' &&
+      call.start >= targetStart &&
+      call.end <= targetEnd
+    ) {
+      internal.push(call);
+    } else {
+      external.push(call);
+    }
+  }
+  return { internal, external };
+}
+
+function applyInternalCallReplacements(
+  originalFnText: string,
+  internalCalls: any[],
+  targetStart: number,
+  buildReplacement: (exprText: string, argsTextArr: string[] | null) => string
+): string {
+  if (!internalCalls.length) {
+    return originalFnText;
+  }
+  let updated = originalFnText;
+  const sorted = [...internalCalls].sort((a, b) => (b.start ?? 0) - (a.start ?? 0));
+  for (const call of sorted) {
+    if (typeof call.start !== 'number' || typeof call.end !== 'number') {
+      continue;
+    }
+    const relativeStart = call.start - targetStart;
+    const relativeEnd = call.end - targetStart;
+    if (
+      relativeStart < 0 ||
+      relativeEnd > updated.length ||
+      relativeStart >= relativeEnd
+    ) {
+      log(
+        'WARNING: Skipping internal call replacement due to invalid range',
+        call.filePath,
+        'range',
+        relativeStart,
+        '-',
+        relativeEnd
+      );
+      continue;
+    }
+    const replacement = buildReplacement(call.exprText, call.argsText || []);
+    updated =
+      updated.slice(0, relativeStart) +
+      replacement +
+      updated.slice(relativeEnd);
+  }
+  return updated;
+}
+
 export async function convertCommandHandler(...args: any[]): Promise<void> {
   const context = utils.getWorkspaceContext();
   if (!context) return;
@@ -130,7 +205,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       return;
     }
 
-    const confirmed = callCollection.confirmed;
+    let confirmed = callCollection.confirmed;
     let fuzzy = callCollection.fuzzy;
     const alreadyConvertedCount = callCollection.alreadyConvertedCount || 0;
 
@@ -150,7 +225,6 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
       log('No calls found, converting function signature only');
 
-      // Get types and build the converted signature
       const isTypeScript =
         sourceFile.getFilePath().endsWith('.ts') ||
         sourceFile.getFilePath().endsWith('.tsx');
@@ -171,7 +245,6 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         isRestParameter
       );
 
-      // Show preview dialog if enabled
       let aborted = false;
       if (showPreviews) {
         aborted = await dialogs.showFunctionConversionDialog(
@@ -199,7 +272,6 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       const success = await vscode.workspace.applyEdit(edit);
       if (success) {
         if (!showPreviews) {
-          // Highlight the converted function signature
           try {
             await text.highlightConvertedFunction(
               filePath,
@@ -216,43 +288,64 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         }
 
         void vscode.window.showInformationMessage(
-          `Objectify Params: Converted function but no calls were found.`
+          'Objectify Params: Converted function but no calls were found.'
         );
       }
       return;
     }
 
     if (fuzzy.length === 0 && confirmed.length > 0) {
+      const paramTypeText = parse.extractParameterTypes(
+        params,
+        paramNames,
+        sourceFile,
+        isRestParameter,
+        restTupleElements
+      );
+      const isTypeScript =
+        sourceFile.getFilePath().endsWith('.ts') ||
+        sourceFile.getFilePath().endsWith('.tsx');
+      const buildReplacement = (
+        exprText: string,
+        argsTextArr: string[] | null
+      ) => {
+        const props = paramNames
+          .map((name, idx) => {
+            const aText =
+              argsTextArr && argsTextArr[idx] ? argsTextArr[idx] : 'undefined';
+            if (aText === name) return `${name}`;
+            return `${name}:${aText}`;
+          })
+          .join(', ');
+        return `${exprText}({ ${props} })`;
+      };
+
+      const { internal: internalCalls, external: externalCalls } =
+        splitInternalCalls(confirmed, filePath, targetStart, targetEnd);
+      const functionTextWithInternal = applyInternalCallReplacements(
+        originalFunctionText,
+        internalCalls,
+        targetStart,
+        buildReplacement
+      );
+      const convertedFunctionText = text.transformFunctionText(
+        functionTextWithInternal,
+        params,
+        paramNames,
+        paramTypeText,
+        isTypeScript,
+        isRestParameter
+      );
+
       let aborted = false;
 
-      // Show function conversion dialog if previews are enabled
       if (showPreviews) {
-        // Build the converted function text for preview
-        const isTypeScript =
-          sourceFile.getFilePath().endsWith('.ts') ||
-          sourceFile.getFilePath().endsWith('.tsx');
-        const paramTypeText = parse.extractParameterTypes(
-          params,
-          paramNames,
-          sourceFile,
-          isRestParameter,
-          restTupleElements
-        );
-        const newFnText = text.transformFunctionText(
-          originalFunctionText,
-          params,
-          paramNames,
-          paramTypeText,
-          isTypeScript,
-          isRestParameter
-        );
-
         aborted = await dialogs.showFunctionConversionDialog(
           filePath,
           targetStart,
           targetEnd,
           originalFunctionText,
-          newFnText,
+          convertedFunctionText,
           originalEditor,
           originalSelection
         );
@@ -264,7 +357,6 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           return;
         }
 
-        // Now show confirmed call monitoring
         aborted = await dialogs.monitorConfirmedCalls(
           confirmed,
           confirmed.length,
@@ -285,22 +377,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
       const edit = new vscode.WorkspaceEdit();
       const docsToSave = new Map<string, vscode.TextDocument>();
-      const replByFile = new Map<string, string>();
-      const buildReplacement = (exprText: string, argsTextArr: string[]) => {
-        const props = paramNames
-          .map((name, idx) => {
-            const aText =
-              argsTextArr && argsTextArr[idx] ? argsTextArr[idx] : 'undefined';
-            if (aText === name) return `${name}`;
-            return `${name}:${aText}`;
-          })
-          .join(', ');
-        return `${exprText}({ ${props} })`;
-      };
       log('=== CONFIRMED-ONLY PATH: About to apply', confirmed.length, 'edits ===');
-      
-      // Sort edits by start position to check for overlaps
-      const sortedConfirmed = [...confirmed].sort((a, b) => a.start - b.start);
+
+      const sortedConfirmed = [...externalCalls].sort((a, b) => a.start - b.start);
       for (let i = 0; i < sortedConfirmed.length - 1; i++) {
         const curr = sortedConfirmed[i];
         const next = sortedConfirmed[i + 1];
@@ -311,37 +390,15 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           log('  Overlap:', curr.end - next.start, 'characters');
         }
       }
-      
-      // Build the function signature edit first (before document is modified)
-      const paramTypeText = parse.extractParameterTypes(
-        params,
-        paramNames,
-        sourceFile,
-        isRestParameter,
-        restTupleElements
-      );
-      const isTypeScript =
-        sourceFile.getFilePath().endsWith('.ts') ||
-        sourceFile.getFilePath().endsWith('.tsx');
-      const newFnText = text.transformFunctionText(
-        originalFunctionText,
-        params,
-        paramNames,
-        paramTypeText,
-        isTypeScript,
-        isRestParameter
-      );
-      
-      // Add function signature edit to the same WorkspaceEdit
+
       const funcUri = vscode.Uri.file(filePath);
       const funcDoc = await vscode.workspace.openTextDocument(funcUri);
       const funcStartPos = funcDoc.positionAt(targetStart);
       const funcEndPos = funcDoc.positionAt(targetEnd);
-      edit.replace(funcUri, new vscode.Range(funcStartPos, funcEndPos), newFnText);
+      edit.replace(funcUri, new vscode.Range(funcStartPos, funcEndPos), convertedFunctionText);
       log('Added function signature edit at offsets', targetStart, '-', targetEnd);
-      
-      // Add all call edits
-      for (const c of confirmed) {
+
+      for (const c of externalCalls) {
         const uri = vscode.Uri.file(c.filePath);
         const doc = await vscode.workspace.openTextDocument(uri);
         docsToSave.set(c.filePath, doc);
@@ -349,7 +406,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         const endPos = doc.positionAt(c.end);
         const orig = doc.getText().slice(c.start, c.end);
         const repl = buildReplacement(c.exprText, c.argsText);
-        log('EDIT #' + (confirmed.indexOf(c) + 1), ':', c.filePath, 'offsets', c.start, '-', c.end);
+        log('EDIT #' + (externalCalls.indexOf(c) + 1), ':', c.filePath, 'offsets', c.start, '-', c.end);
         log('  exprText:', c.exprText);
         log('  argsText:', JSON.stringify(c.argsText));
         log('  ---orig---\n  ' + orig);
@@ -364,13 +421,10 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         'file(s) - files are marked dirty, user can save manually'
       );
 
-      // Calculate offset shift from edits in same file that came before the function
       let offsetShift = 0;
-      
-      // Use URI fsPath for consistent path comparison
       const targetFilePath = vscode.Uri.file(filePath).fsPath;
-      
-      for (const c of confirmed) {
+
+      for (const c of externalCalls) {
         const callFilePath = vscode.Uri.file(c.filePath).fsPath;
         if (callFilePath === targetFilePath && c.end <= targetStart) {
           const orig = c.end - c.start;
@@ -379,13 +433,12 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         }
       }
 
-      // Highlight the converted function signature
       try {
         await text.highlightConvertedFunction(
           filePath,
           targetStart + offsetShift,
           targetEnd + offsetShift,
-          newFnText,
+          convertedFunctionText,
           originalEditor,
           originalSelection,
           highlightDelay
@@ -393,10 +446,11 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       } catch (e) {
         log('error highlighting function', e);
       }
-      
-      if (confirmed.length > 0) {
+
+      const totalConvertedCalls = externalCalls.length + internalCalls.length;
+      if (totalConvertedCalls > 0) {
         void vscode.window.showInformationMessage(
-          `Objectify Params: Converted ${confirmed.length} call(s) and updated function.`
+          `Objectify Params: Converted ${totalConvertedCalls} call(s) and updated function.`
         );
       } else {
         void vscode.window.showInformationMessage(
@@ -663,7 +717,6 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     editAll.replace(funcUri, new vscode.Range(funcStartPos, funcEndPos), newFnText2);
     log('Added function signature edit at offsets', targetStart, '-', targetEnd);
 
-    const replAllMap = new Map<string, string>();
     log('=== MIXED PATH: About to apply', allCandidates.length, 'call edits ===');
     for (const c of allCandidates) {
       if (
