@@ -12,7 +12,7 @@ Automatically refactor JavaScript or TypeScript functions to use object paramete
 
 ![Objectifying One Parameter List (Delay exaggerated)](images/intro.gif)
 
-*Objectifying One Function's Parameter List. Preview walkthrough is optional.*
+*Preview walkthrough is optional.*
 
 ### Usage
 
@@ -54,6 +54,7 @@ Access settings via **File > Preferences > Settings** and search for "Objectify 
 - **Type**: `string`
 - **Default**: `"**/node_modules/**"`
 - Space-separated glob patterns to exclude
+- Priority over includes
 
 #### `objectifyParams.showPreviews`
 - **Type**: `boolean`
@@ -110,10 +111,7 @@ MIT
 
 - [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=eridien.objectify-params)
 - [GitHub Repository](https://github.com/mark-hahn/vscode-objectify-params)
-
-### Contributing
-
-Issues and pull requests welcome at the [GitHub repository](https://github.com/mark-hahn/vscode-objectify-params).
+- Issues and pull requests welcome
 
 ### Author
 
