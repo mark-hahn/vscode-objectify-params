@@ -207,15 +207,16 @@ export async function highlightConvertedFunction(
   const uri = vscode.Uri.file(filePath);
   const doc = await vscode.workspace.openTextDocument(uri);
   
-  // Calculate signature end (find the last brace on the first line for function body)
-  // The parameter list may contain { } for object destructuring
+  // Calculate signature end (find the opening brace of function body)
+  // The parameter list may contain { } for object destructuring, so find the last {
+  // Search up to the first newline after a closing paren, or the whole text
   let signatureLength = newFnText.length;
-  const lines = newFnText.split('\n');
-  if (lines.length > 0) {
-    const firstLine = lines[0];
-    const lastBraceIdx = firstLine.lastIndexOf('{');
-    if (lastBraceIdx >= 0) {
-      signatureLength = lastBraceIdx;
+  const closingParenIdx = newFnText.indexOf(')');
+  if (closingParenIdx >= 0) {
+    const afterParen = newFnText.substring(closingParenIdx);
+    const braceIdx = afterParen.indexOf('{');
+    if (braceIdx >= 0) {
+      signatureLength = closingParenIdx + braceIdx;
     }
   }
 

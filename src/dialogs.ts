@@ -69,15 +69,14 @@ export async function showFunctionConversionDialog(
       });
 
       // Calculate the signature range in the CONVERTED function (up to the function body's opening brace)
-      // Need to find the LAST brace before a newline, or the last brace overall
-      // The parameter list may contain { } for object destructuring
+      // The parameter list may contain { } for object destructuring, so find the brace after )
       let signatureEnd = newFunctionText.length;
-      const lines = newFunctionText.split('\n');
-      if (lines.length > 0) {
-        const firstLine = lines[0];
-        const lastBraceIdx = firstLine.lastIndexOf('{');
-        if (lastBraceIdx >= 0) {
-          signatureEnd = lastBraceIdx;
+      const closingParenIdx = newFunctionText.indexOf(')');
+      if (closingParenIdx >= 0) {
+        const afterParen = newFunctionText.substring(closingParenIdx);
+        const braceIdx = afterParen.indexOf('{');
+        if (braceIdx >= 0) {
+          signatureEnd = closingParenIdx + braceIdx;
         }
       }
 

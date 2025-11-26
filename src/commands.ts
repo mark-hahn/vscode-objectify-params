@@ -656,21 +656,6 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       'file(s) - files are marked dirty, user can save manually'
     );
 
-    // Highlight the converted function signature
-    try {
-      await text.highlightConvertedFunction(
-        filePath,
-        targetStart,
-        targetEnd,
-        newFnText2,
-        originalEditor,
-        originalSelection,
-        highlightDelay
-      );
-    } catch (e) {
-      log('error highlighting function (mixed path)', e);
-    }
-
     void vscode.window.showInformationMessage(
       `Objectify Params: Converted ${
         confirmed.length + acceptedFuzzy.length
