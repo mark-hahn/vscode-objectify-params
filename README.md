@@ -18,7 +18,7 @@ Automatically refactor JavaScript or TypeScript functions to use object paramete
 
 1. Place your cursor inside a function definition.
 2. Right-click and select **"Objectify Parameters"** or use the Command Palette. You can assign your own hot-key.
-3. Review any uncertain conversions in interactive dialogs.
+3. Review any uncertain conversions in interactive dialogs. In every dialog the cancel button will remove all changes.
 4. The extension updates both the function signature and all call sites.
 
 #### Before
