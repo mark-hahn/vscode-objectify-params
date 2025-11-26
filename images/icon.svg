@@ -1,0 +1,27 @@
+<svg width="128" height="128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="128" height="128" rx="16" fill="#2563eb"/>
+  
+  <!-- Arrow/Transform symbol -->
+  <path d="M 35 40 L 35 55 L 20 55 L 40 75 L 60 55 L 45 55 L 45 40 Z" fill="#60a5fa"/>
+  
+  <!-- Curly braces (object destructuring) -->
+  <path d="M 70 35 Q 65 35 65 40 L 65 50 Q 65 53 62 53 Q 65 53 65 56 L 65 66 Q 65 71 70 71" 
+        stroke="#fbbf24" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 108 35 Q 113 35 113 40 L 113 50 Q 113 53 116 53 Q 113 53 113 56 L 113 66 Q 113 71 108 71" 
+        stroke="#fbbf24" stroke-width="3" fill="none" stroke-linecap="round"/>
+  
+  <!-- Parameter dots -->
+  <circle cx="82" cy="53" r="3" fill="#fbbf24"/>
+  <circle cx="90" cy="53" r="3" fill="#fbbf24"/>
+  <circle cx="98" cy="53" r="3" fill="#fbbf24"/>
+  
+  <!-- Function parentheses (old style) -->
+  <path d="M 25 85 Q 20 85 20 90 L 20 103 Q 20 108 25 108" 
+        stroke="#94a3b8" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M 55 85 Q 60 85 60 90 L 60 103 Q 60 108 55 108" 
+        stroke="#94a3b8" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  
+  <!-- Old param indicators -->
+  <line x1="30" y1="96.5" x2="50" y2="96.5" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+</svg>
