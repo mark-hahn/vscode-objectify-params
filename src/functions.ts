@@ -30,11 +30,23 @@ export function findTargetFunction(
   // We'll check all function types and keep the one with the smallest range
   let smallestRange = Infinity;
 
-  // Helper to update target if this function is innermost
+  // Helper to update target if cursor is in the function signature
   const considerFunction = (func: any, varDecl: any = null) => {
     const start = func.getStart();
     const end = func.getEnd();
-    if (start <= cursorOffset && cursorOffset <= end) {
+    
+    // Only consider if cursor is in the signature, not the body
+    // Find the opening brace of the function body
+    const funcText = func.getText();
+    const openBraceIdx = funcText.indexOf('{');
+    
+    let signatureEnd = end;
+    if (openBraceIdx >= 0) {
+      signatureEnd = start + openBraceIdx;
+    }
+    
+    // Cursor must be in the signature range (before the opening brace)
+    if (start <= cursorOffset && cursorOffset <= signatureEnd) {
       const range = end - start;
       if (range < smallestRange) {
         smallestRange = range;

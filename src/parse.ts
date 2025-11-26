@@ -471,11 +471,6 @@ export async function collectCalls(
               });
               continue;
             }
-
-            if (!isMatch) {
-              // Symbols don't match - this is a different function with the same name
-              continue;
-            }
           }
 
           // Process the call (symbol matched or no symbol to compare)
