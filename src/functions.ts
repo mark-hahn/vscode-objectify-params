@@ -11,6 +11,33 @@ export interface FunctionDetectionResult {
   fnName: string | null;
 }
 
+function getFunctionSignatureEnd(func: any): number {
+  const start = func.getStart ? func.getStart() : 0;
+  const end = func.getEnd ? func.getEnd() : start;
+  try {
+    const funcText = func.getText ? func.getText() : '';
+    if (funcText) {
+      const braceIdx = funcText.indexOf('{');
+      if (braceIdx >= 0) {
+        return start + braceIdx;
+      }
+      const arrowIdx = funcText.indexOf('=>');
+      if (arrowIdx >= 0) {
+        return start + arrowIdx + 2;
+      }
+    }
+    if (typeof func.getBody === 'function') {
+      const body = func.getBody();
+      if (body && typeof body.getStart === 'function') {
+        return body.getStart();
+      }
+    }
+  } catch (e) {
+    // fall back to end below
+  }
+  return end;
+}
+
 /**
  * Find the function/method at the cursor position
  * Searches for:
@@ -31,7 +58,6 @@ export function findTargetFunction(
   let smallestRange = Infinity;
 
   // Helper to update target if cursor is in the function signature
-  let bestInSignature = false;
   const considerFunction = (func: any, varDecl: any = null) => {
     const start = func.getStart();
     const end = func.getEnd();
@@ -40,31 +66,20 @@ export function findTargetFunction(
       return;
     }
 
-    if (cursorOffset < start || cursorOffset > end) {
+    const signatureEnd = getFunctionSignatureEnd(func);
+
+    if (cursorOffset < start || cursorOffset > signatureEnd) {
       return;
     }
 
-    const funcText = func.getText();
-    const openBraceIdx = funcText.indexOf('{');
-
-    let signatureEnd = end;
-    if (openBraceIdx >= 0) {
-      signatureEnd = start + openBraceIdx;
-    }
-
-    const inSignature = cursorOffset <= signatureEnd;
     const range = end - start;
 
-    const shouldUpdate =
-      !targetFunction ||
-      (inSignature && !bestInSignature) ||
-      (inSignature === bestInSignature && range < smallestRange);
+    const shouldUpdate = !targetFunction || range < smallestRange;
 
     if (shouldUpdate) {
       smallestRange = range;
       targetFunction = func;
       targetVariableDeclaration = varDecl;
-      bestInSignature = inSignature;
     }
   };
 
@@ -84,10 +99,12 @@ export function findTargetFunction(
     
     const varStart = varDecl.getStart();
     const varEnd = varDecl.getEnd();
-    
-    // If cursor is anywhere in the variable declaration (including the name),
-    // consider the initializer function but use the variable declaration's range
-    if (varStart <= cursorOffset && cursorOffset <= varEnd) {
+    const signatureEnd = Math.max(
+      getFunctionSignatureEnd(init),
+      varStart
+    );
+
+    if (varStart <= cursorOffset && cursorOffset <= signatureEnd) {
       const range = varEnd - varStart;
       if (range < smallestRange) {
         smallestRange = range;
