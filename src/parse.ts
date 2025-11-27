@@ -8,6 +8,44 @@ import * as dialogs from './dialogs';
 
 const { log } = utils.getLog('pars');
 
+const vueLikeExtensions = new Set(['.vue', '.svelte']);
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractVueScriptContent(filePath: string): string | null {
+  try {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+    let match: RegExpExecArray | null;
+    let combined = '';
+    while ((match = scriptRegex.exec(text)) !== null) {
+      combined += match[1] + '\n';
+    }
+    return combined || null;
+  } catch (e) {
+    log('extractVueScriptContent error for', filePath, e);
+    return null;
+  }
+}
+
+function hasVueScriptDefinition(
+  filePath: string,
+  fnName: string
+): boolean {
+  const content = extractVueScriptContent(filePath);
+  if (!content) return false;
+  const escaped = escapeRegExp(fnName);
+  const patterns = [
+    new RegExp(`\\bfunction\\s+${escaped}\\s*\\(`),
+    new RegExp(`\\b(?:const|let|var)\\s+${escaped}\\s*=\\s*(?:async\\s*)?(?:function\\b|\\()`),
+    new RegExp(`\\b${escaped}\\s*:\\s*(?:async\\s*)?function\\s*\\(`),
+    new RegExp(`(^|[\\s,{;])${escaped}\\s*\\([^)]*\\)\\s*{`, 'm'),
+  ];
+  return patterns.some((re) => re.test(content));
+}
+
 export interface SymbolResolution {
   resolvedTarget: any;
   canProceedWithoutSymbol: boolean;
@@ -283,6 +321,11 @@ export async function collectCalls(
 
     let conflict = false;
 
+    const filePath = sf.getFilePath?.();
+    const fileExt = filePath
+      ? path.extname(filePath).toLowerCase()
+      : undefined;
+
     try {
       const funcDecls = sf.getFunctions?.() || [];
       conflict = funcDecls.some((f: any) => {
@@ -354,6 +397,16 @@ export async function collectCalls(
       }
     } catch (e) {
       conflict = false;
+    }
+
+    if (
+      !conflict &&
+      filePath &&
+      fileExt &&
+      vueLikeExtensions.has(fileExt) &&
+      !isSourceFile
+    ) {
+      conflict = hasVueScriptDefinition(filePath, fnName);
     }
 
     localDefinitionCache.set(normalizedSfPath, conflict);
