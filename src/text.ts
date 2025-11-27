@@ -202,7 +202,8 @@ export async function highlightConvertedFunction(
   newFnText: string,
   originalEditor: vscode.TextEditor | undefined,
   originalSelection: vscode.Selection | undefined,
-  highlightDelay: number
+  highlightDelay: number,
+  highlightStart?: number
 ): Promise<void> {
   const uri = vscode.Uri.file(filePath);
   const doc = await vscode.workspace.openTextDocument(uri);
@@ -228,7 +229,11 @@ export async function highlightConvertedFunction(
     }
   }
 
-  const startPos = doc.positionAt(targetStart);
+  const highlightRangeStart = Math.min(
+    typeof highlightStart === 'number' ? highlightStart : targetStart,
+    targetStart
+  );
+  const startPos = doc.positionAt(highlightRangeStart);
   const endPos = doc.positionAt(targetStart + signatureLength);
 
   if (highlightDelay > 0) {

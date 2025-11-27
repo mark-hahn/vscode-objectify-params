@@ -127,8 +127,12 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
     // If file wasn't in the project, warn the user
     if (wasNotInProject) {
+      const cfg = vscode.workspace.getConfiguration('objectifyParams');
+      const includeGlobs = (cfg.get('include') as string) || '**/*.ts **/*.js';
+      const excludeGlobs = (cfg.get('exclude') as string) || '**/node_modules/**';
+      const workspaceRelative = vscode.workspace.asRelativePath(filePath, false);
       void vscode.window.showInformationMessage(
-        `Objectify Params: File "${path.basename(filePath)}" not included in configured patterns. Current patterns: ${vscode.workspace.getConfiguration('objectifyParams').get('include') || '**/*.ts **/*.js'}`
+        `Objectify Params: File "${workspaceRelative}" not included in configured patterns. include=${includeGlobs} exclude=${excludeGlobs}`
       );
       return;
     }
@@ -150,6 +154,24 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     const targetStart = targetFunction.getStart();
     const targetEnd = targetFunction.getEnd();
     const originalFunctionText = targetFunction.getText();
+
+    let highlightStart = targetStart;
+    if (targetVariableDeclaration) {
+      try {
+        const nameNode =
+          typeof targetVariableDeclaration.getNameNode === 'function'
+            ? targetVariableDeclaration.getNameNode()
+            : undefined;
+        if (nameNode && typeof nameNode.getStart === 'function') {
+          const nameStart = nameNode.getStart();
+          if (typeof nameStart === 'number' && nameStart < targetStart) {
+            highlightStart = nameStart;
+          }
+        }
+      } catch (e) {
+        // ignore errors; default highlight start is the function start
+      }
+    }
 
     // Check if function already uses object destructuring pattern
     const hasObjectDestructuring =
@@ -254,7 +276,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           originalFunctionText,
           newFnText,
           originalEditor,
-          originalSelection
+          originalSelection,
+          highlightStart
         );
       }
 
@@ -280,7 +303,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
               newFnText,
               originalEditor,
               originalSelection,
-              highlightDelay
+              highlightDelay,
+              highlightStart
             );
           } catch (e) {
             log('error highlighting function', e);
@@ -347,7 +371,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           originalFunctionText,
           convertedFunctionText,
           originalEditor,
-          originalSelection
+          originalSelection,
+          highlightStart
         );
 
         if (aborted) {
@@ -441,7 +466,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           convertedFunctionText,
           originalEditor,
           originalSelection,
-          highlightDelay
+          highlightDelay,
+          highlightStart + offsetShift
         );
       } catch (e) {
         log('error highlighting function', e);
@@ -517,7 +543,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         originalFunctionText,
         newFnText,
         originalEditor,
-        originalSelection
+        originalSelection,
+        highlightStart
       );
 
       if (aborted) {
@@ -676,7 +703,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
             newFnText,
             originalEditor,
             originalSelection,
-            highlightDelay
+            highlightDelay,
+            highlightStart
           );
         } catch (e) {
           log('error highlighting function', e);

@@ -35,7 +35,8 @@ export async function showFunctionConversionDialog(
   originalFunctionText: string,
   newFunctionText: string,
   originalEditor: vscode.TextEditor | undefined,
-  originalSelection: vscode.Selection | undefined
+  originalSelection: vscode.Selection | undefined,
+  highlightStart?: number
 ): Promise<boolean> {
   const greenDecoration = vscode.window.createTextEditorDecorationType({
     backgroundColor: 'rgba(100,255,100,0.3)',
@@ -96,8 +97,13 @@ export async function showFunctionConversionDialog(
       );
 
       // Show green highlight on the function signature only
+      const highlightOffset =
+        typeof highlightStart === 'number' ? highlightStart : targetStart;
+      const highlightRangeStart = Math.min(highlightOffset, targetStart);
+      const highlightStartPos = updatedDoc.positionAt(highlightRangeStart);
+
       editor.setDecorations(greenDecoration, [
-        new vscode.Range(startPos, convertedSignatureEndPos),
+        new vscode.Range(highlightStartPos, convertedSignatureEndPos),
       ]);
 
       // Show confirmation dialog
