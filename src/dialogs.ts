@@ -252,6 +252,17 @@ export async function monitorConfirmedCalls(
 
   greenDecoration.dispose();
 
+  if (originalEditor && originalSelection) {
+    try {
+      await vscode.window.showTextDocument(originalEditor.document, {
+        selection: originalSelection,
+        preserveFocus: false,
+      });
+    } catch (e) {
+      log('Warning: unable to restore original editor after confirmed previews', e);
+    }
+  }
+
   return false; // not aborted
 }
 
