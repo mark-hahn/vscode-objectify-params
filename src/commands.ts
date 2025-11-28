@@ -217,6 +217,13 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     const highlightDelay = (cfg.get('highlightDelay') as number) ?? 1000;
     const objectVariableSetting = (cfg.get('objectVariable') as string) || '';
     const objectVariableName = objectVariableSetting.trim();
+    const identifierRegex = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+    if (objectVariableName && !identifierRegex.test(objectVariableName)) {
+      void vscode.window.showErrorMessage(
+        `Objectify Params: "${objectVariableName}" is not a valid variable name. Change it in settings.`
+      );
+      return;
+    }
     const preserveTypesSetting = cfg.get('preserveTypes');
     const preserveTypes =
       typeof preserveTypesSetting === 'boolean' ? preserveTypesSetting : true;
