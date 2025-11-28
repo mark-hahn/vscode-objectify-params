@@ -3,7 +3,6 @@ testfiles
 .vscode
 node_modules
 out
-package-lock.json
 jsproject
 wvtest
 misc
