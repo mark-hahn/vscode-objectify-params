@@ -60,8 +60,8 @@
         },
         "objectifyParams.objectVariable": {
           "type": "string",
-          "default": "",
-          "markdownDescription": "Optional variable name to receive the incoming params object. When set, the signature keeps this variable (no destructuring) and the body receives a `let { ... } = name;` statement inserted on the first line."
+          "default": "$par$",
+          "markdownDescription": "Optional variable name to receive the incoming params object. When set, the signature keeps this variable (no destructuring) and the body receives a `let { ... } = $par$;` statement inserted on the first line. When blank, destructuring is used directly in the signature."
         },
         "objectifyParams.preserveTypes": {
           "type": "boolean",

@@ -69,7 +69,7 @@ Access settings via **File > Preferences > Settings** and search for "Objectify 
 
 #### `objectifyParams.objectVariable`
 - **Type**: `string`
-- **Default**: *(empty)*
+- **Default**: `$par$`
 - Provide a variable name (for example, `params`) to keep a single object parameter in the signature. The extension inserts `let { ... } = params;` as the first statement inside the function body so existing destructuring continues to work.
 
 #### `objectifyParams.preserveTypes`
