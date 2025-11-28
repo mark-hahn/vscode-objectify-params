@@ -36,7 +36,8 @@ export async function showFunctionConversionDialog(
   newFunctionText: string,
   originalEditor: vscode.TextEditor | undefined,
   originalSelection: vscode.Selection | undefined,
-  highlightStart?: number
+  highlightStart?: number,
+  includeDestructureLine?: boolean
 ): Promise<boolean> {
   const greenDecoration = vscode.window.createTextEditorDecorationType({
     backgroundColor: 'rgba(100,255,100,0.3)',
@@ -69,23 +70,16 @@ export async function showFunctionConversionDialog(
         );
       });
 
-      // Calculate the signature range in the CONVERTED function (up to the function body's opening brace)
-      // The parameter list may contain { } for object destructuring, so find the brace after )
-      let signatureEnd = newFunctionText.length;
-      const closingParenIdx = newFunctionText.indexOf(')');
-      if (closingParenIdx >= 0) {
-        const afterParen = newFunctionText.substring(closingParenIdx);
-        const braceIdx = afterParen.indexOf('{');
-        if (braceIdx >= 0) {
-          signatureEnd = closingParenIdx + braceIdx;
-        }
-      }
+      const signatureLength = text.computeSignatureHighlightLength(
+        newFunctionText,
+        includeDestructureLine
+      );
 
       // Get the updated document after the edit
       const updatedDoc = editor.document;
       const convertedStartPos = startPos; // Start position hasn't changed
       const convertedSignatureEndPos = updatedDoc.positionAt(
-        updatedDoc.offsetAt(convertedStartPos) + signatureEnd
+        updatedDoc.offsetAt(convertedStartPos) + signatureLength
       );
 
       // Reveal the function near top (3 lines from top)

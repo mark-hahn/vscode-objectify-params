@@ -408,7 +408,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           newFnText,
           originalEditor,
           originalSelection,
-          highlightStart
+          highlightStart,
+          Boolean(objectVariableName)
         );
       }
 
@@ -434,7 +435,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
             originalEditor,
             originalSelection,
             highlightDelay,
-            highlightStart
+            highlightStart,
+            Boolean(objectVariableName)
           );
         } catch (e) {
           log('error highlighting function', e);
@@ -494,7 +496,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           convertedFunctionText,
           originalEditor,
           originalSelection,
-          highlightStart
+          highlightStart,
+          Boolean(objectVariableName)
         );
 
         if (aborted) {
@@ -589,7 +592,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           originalEditor,
           originalSelection,
           highlightDelay,
-          highlightStart + offsetShift
+          highlightStart + offsetShift,
+          Boolean(objectVariableName)
         );
       } catch (e) {
         log('error highlighting function', e);
@@ -659,7 +663,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         newFnText,
         originalEditor,
         originalSelection,
-        highlightStart
+        highlightStart,
+        Boolean(objectVariableName)
       );
 
       if (aborted) {
@@ -813,7 +818,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
             originalEditor,
             originalSelection,
             highlightDelay,
-            highlightStart
+            highlightStart,
+            Boolean(objectVariableName)
           );
         } catch (e) {
           log('error highlighting function', e);
@@ -918,7 +924,8 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
           originalEditor,
           originalSelection,
           highlightDelay,
-          highlightStart
+          highlightStart,
+          Boolean(objectVariableName)
         );
       } catch (e) {
         log('error highlighting function after conversions', e);

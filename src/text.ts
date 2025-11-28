@@ -280,6 +280,124 @@ export async function applyCallEdits(
   return docsToSaveAll;
 }
 
+function findDestructureLineEnd(newFnText: string, braceIndex: number): number | null {
+  const len = newFnText.length;
+  let cursor = braceIndex + 1;
+
+  const isWhitespace = (char: string | undefined): boolean => {
+    if (!char) {
+      return false;
+    }
+    return /\s/.test(char);
+  };
+
+  while (cursor < len && isWhitespace(newFnText[cursor])) {
+    cursor++;
+  }
+
+  const keywords = ['let', 'const', 'var'];
+  let matchedKeyword: string | undefined;
+  for (const kw of keywords) {
+    const nextChar = newFnText[cursor + kw.length];
+    if (
+      newFnText.startsWith(kw, cursor) &&
+      (!nextChar || !/[A-Za-z0-9_$]/.test(nextChar))
+    ) {
+      matchedKeyword = kw;
+      break;
+    }
+  }
+
+  if (!matchedKeyword) {
+    return null;
+  }
+
+  cursor += matchedKeyword.length;
+  while (cursor < len && isWhitespace(newFnText[cursor])) {
+    cursor++;
+  }
+
+  if (cursor >= len || newFnText[cursor] !== '{') {
+    return null;
+  }
+
+  let bindingDepth = 0;
+  while (cursor < len) {
+    const char = newFnText[cursor];
+    if (char === '{') {
+      bindingDepth++;
+    } else if (char === '}') {
+      bindingDepth--;
+      if (bindingDepth === 0) {
+        cursor++;
+        break;
+      }
+    }
+    cursor++;
+  }
+
+  if (bindingDepth !== 0) {
+    return null;
+  }
+
+  while (cursor < len && isWhitespace(newFnText[cursor])) {
+    cursor++;
+  }
+
+  if (cursor >= len || newFnText[cursor] !== '=') {
+    return null;
+  }
+
+  cursor++;
+  const semicolonIndex = newFnText.indexOf(';', cursor);
+  if (semicolonIndex === -1) {
+    return null;
+  }
+
+  let endIndex = semicolonIndex + 1;
+  while (
+    endIndex < len &&
+    (newFnText[endIndex] === '\r' || newFnText[endIndex] === '\n')
+  ) {
+    endIndex++;
+  }
+
+  return endIndex;
+}
+
+export function computeSignatureHighlightLength(
+  newFnText: string,
+  includeDestructureLine?: boolean
+): number {
+  let signatureLength = newFnText.length;
+  let parenDepth = 0;
+  let foundParamStart = false;
+  let braceIndex = -1;
+
+  for (let i = 0; i < newFnText.length; i++) {
+    const char = newFnText[i];
+    if (char === '(') {
+      parenDepth++;
+      foundParamStart = true;
+    } else if (char === ')') {
+      parenDepth--;
+    } else if (char === '{' && foundParamStart && parenDepth === 0) {
+      braceIndex = i;
+      signatureLength = i;
+      break;
+    }
+  }
+
+  if (includeDestructureLine && braceIndex >= 0) {
+    const destructureEnd = findDestructureLineEnd(newFnText, braceIndex);
+    if (typeof destructureEnd === 'number') {
+      signatureLength = Math.max(signatureLength, destructureEnd);
+    }
+  }
+
+  return signatureLength;
+}
+
 /**
  * Apply function signature edit and highlight the changed signature
  */
@@ -291,31 +409,17 @@ export async function highlightConvertedFunction(
   originalEditor: vscode.TextEditor | undefined,
   originalSelection: vscode.Selection | undefined,
   highlightDelay: number,
-  highlightStart?: number
+  highlightStart?: number,
+  includeDestructureLine?: boolean
 ): Promise<void> {
   const uri = vscode.Uri.file(filePath);
   const doc = await vscode.workspace.openTextDocument(uri);
   
-  // Calculate signature end (find the opening brace of function body)
-  // Strategy: scan through the text, track paren depth, find first { when paren depth is 0
-  let signatureLength = newFnText.length;
-  let parenDepth = 0;
-  let foundParamStart = false;
-  
-  for (let i = 0; i < newFnText.length; i++) {
-    const char = newFnText[i];
-    
-    if (char === '(') {
-      parenDepth++;
-      foundParamStart = true;
-    } else if (char === ')') {
-      parenDepth--;
-    } else if (char === '{' && foundParamStart && parenDepth === 0) {
-      // Found the function body opening brace
-      signatureLength = i;
-      break;
-    }
-  }
+  // Calculate signature end (optionally include the first destructuring line)
+  const signatureLength = computeSignatureHighlightLength(
+    newFnText,
+    includeDestructureLine
+  );
 
   const highlightRangeStart = Math.min(
     typeof highlightStart === 'number' ? highlightStart : targetStart,
@@ -360,7 +464,8 @@ export async function applyFunctionEditAndHighlight(
   originalEditor: vscode.TextEditor | undefined,
   originalSelection: vscode.Selection | undefined,
   highlightDelay: number,
-  convertedCount: number
+  convertedCount: number,
+  includeDestructureLine?: boolean
 ): Promise<void> {
   const filePath = sourceFile.getFilePath();
   log('=== CONVERTING FUNCTION SIGNATURE ===');
@@ -388,22 +493,10 @@ export async function applyFunctionEditAndHighlight(
   log('applied function text edit:', ok);
 
   // Calculate the range of the updated function signature for highlighting
-  let parenDepth = 0;
-  let signatureEnd = 0;
-  for (let i = 0; i < newFnText.length; i++) {
-    if (newFnText[i] === '(') parenDepth++;
-    if (newFnText[i] === ')') {
-      parenDepth--;
-      if (parenDepth === 0) {
-        const remaining = newFnText.substring(i + 1);
-        const braceIdx = remaining.indexOf('{');
-        signatureEnd = braceIdx >= 0 ? i + 1 + braceIdx : i + 1;
-        break;
-      }
-    }
-  }
-  if (signatureEnd === 0) signatureEnd = newFnText.indexOf('{');
-  if (signatureEnd <= 0) signatureEnd = newFnText.length;
+  const signatureEnd = computeSignatureHighlightLength(
+    newFnText,
+    includeDestructureLine
+  );
 
   const newSignatureEndPos =
     idx >= 0
