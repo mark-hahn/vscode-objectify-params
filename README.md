@@ -67,6 +67,16 @@ Access settings via **File > Preferences > Settings** and search for "Objectify 
 - **Range**: 0-5000ms
 - Duration to show preview highlights. Set to `0` to show only the dialog without delay
 
+#### `objectifyParams.objectVariable`
+- **Type**: `string`
+- **Default**: *(empty)*
+- Provide a variable name (for example, `params`) to keep a single object parameter in the signature. The extension inserts `let { ... } = params;` as the first statement inside the function body so existing destructuring continues to work.
+
+#### `objectifyParams.preserveTypes`
+- **Type**: `boolean`
+- **Default**: `true`
+- When disabled, any extracted TypeScript types are replaced with `any`, dropping type information for both the incoming object and the destructured properties.
+
 ### How It Works
 
 1. **Scanning**: Searches your workspace for all references to the function

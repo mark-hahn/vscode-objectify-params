@@ -57,6 +57,16 @@
           "minimum": 0,
           "maximum": 5000,
           "description": "Time in milliseconds to show preview highlighting. Zero means no preview."
+        },
+        "objectifyParams.objectVariable": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional variable name to receive the incoming params object. When set, the signature keeps this variable (no destructuring) and the body receives a `let { ... } = name;` statement inserted on the first line."
+        },
+        "objectifyParams.preserveTypes": {
+          "type": "boolean",
+          "default": true,
+          "description": "When false, replace the generated object parameter types with `any`, discarding the extracted TypeScript types."
         }
       }
     }

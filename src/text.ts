@@ -3,6 +3,16 @@ import * as utils from './utils';
 
 const { log } = utils.getLog('text');
 
+export interface TransformFunctionOptions {
+  objectVariableName?: string;
+  preserveTypes?: boolean;
+}
+
+export interface TransformFunctionResult {
+  text: string;
+  destructuredParams: string;
+}
+
 /**
  * Transform function text to use object destructuring parameter
  */
@@ -12,10 +22,16 @@ export function transformFunctionText(
   paramNames: string[],
   paramTypeText: string,
   isTypeScript: boolean,
-  isRestParameter: boolean
-): string {
+  isRestParameter: boolean,
+  options?: TransformFunctionOptions
+): TransformFunctionResult {
   const open = fnText.indexOf('(');
-  if (open < 0) return fnText;
+  if (open < 0) {
+    return {
+      text: fnText,
+      destructuredParams: '',
+    };
+  }
   let i = open + 1;
   let depth = 1;
   while (i < fnText.length && depth > 0) {
@@ -49,11 +65,83 @@ export function transformFunctionText(
       .join(', ');
   }
 
-  const newParams = isTypeScript
-    ? `{ ${paramsWithDefaults} }: ${paramTypeText}`
-    : `{ ${paramsWithDefaults} }`;
+  const objectVar = options?.objectVariableName?.trim() || '';
+  const preserveTypes = options?.preserveTypes !== false;
+  const resolvedTypeText = !isTypeScript
+    ? ''
+    : preserveTypes && paramTypeText && paramTypeText.trim().length > 0
+    ? paramTypeText
+    : 'any';
+
+  let newParams: string;
+  if (objectVar) {
+    newParams = isTypeScript ? `${objectVar}: ${resolvedTypeText}` : objectVar;
+  } else {
+    newParams = isTypeScript
+      ? `{ ${paramsWithDefaults} }: ${resolvedTypeText}`
+      : `{ ${paramsWithDefaults} }`;
+  }
+
   const newFn = before + newParams + after;
-  return newFn;
+  return {
+    text: newFn,
+    destructuredParams: paramsWithDefaults,
+  };
+}
+
+function detectEol(text: string): string {
+  return text.includes('\r\n') ? '\r\n' : '\n';
+}
+
+function getIndentForNextContent(text: string): string {
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    if (line.trim().length === 0) {
+      continue;
+    }
+    const match = line.match(/^(\s*)/);
+    return match ? match[1] : '';
+  }
+  return '';
+}
+
+/**
+ * Insert "let { ... } = objectVar" as the first line in the function body
+ * when the object variable option is enabled.
+ */
+export function insertObjectVariableDestructureLine(
+  fnText: string,
+  destructuredParams: string,
+  objectVariableName: string
+): string {
+  if (!destructuredParams.trim() || !objectVariableName.trim()) {
+    return fnText;
+  }
+
+  const braceIndex = fnText.indexOf('{');
+  if (braceIndex === -1) {
+    return fnText;
+  }
+
+  const beforeBody = fnText.slice(0, braceIndex + 1);
+  const afterBody = fnText.slice(braceIndex + 1);
+  const eol = detectEol(fnText);
+
+  const newlineIndex = afterBody.indexOf('\n');
+  if (newlineIndex >= 0) {
+    const beforeNextLine = afterBody.slice(0, newlineIndex + 1);
+    const rest = afterBody.slice(newlineIndex + 1);
+    const indent = getIndentForNextContent(rest);
+    const destructureLine = `${indent}let { ${destructuredParams} } = ${objectVariableName};${eol}`;
+    return `${beforeBody}${beforeNextLine}${destructureLine}${rest}`;
+  }
+
+  const indentMatch = afterBody.match(/^(\s*)/);
+  const indent = indentMatch ? indentMatch[1] : '';
+  const rest = afterBody.slice(indent.length);
+  const destructureLine = `${eol}${indent}let { ${destructuredParams} } = ${objectVariableName};${eol}`;
+  const rebuilt = `${beforeBody}${destructureLine}${indent}${rest}`;
+  return rebuilt;
 }
 
 /**

@@ -127,6 +127,10 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       );
     }
 
+    const isTypeScriptFile =
+      sourceFile.getFilePath().endsWith('.ts') ||
+      sourceFile.getFilePath().endsWith('.tsx');
+
     // Find function declaration or function expression at cursor
     const functionResult = functions.findTargetFunction(
       sourceFile,
@@ -138,6 +142,15 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
     const { targetFunction, targetVariableDeclaration, params, fnName } =
       functionResult;
+
+    const cfg = vscode.workspace.getConfiguration('objectifyParams');
+    const showPreviews = cfg.get('showPreviews') as boolean;
+    const highlightDelay = (cfg.get('highlightDelay') as number) ?? 1000;
+    const objectVariableSetting = (cfg.get('objectVariable') as string) || '';
+    const objectVariableName = objectVariableSetting.trim();
+    const preserveTypesSetting = cfg.get('preserveTypes');
+    const preserveTypes =
+      typeof preserveTypesSetting === 'boolean' ? preserveTypesSetting : true;
 
     // If file wasn't in the project, warn the user
     if (wasNotInProject) {
@@ -201,6 +214,23 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       return;
     }
 
+    if (objectVariableName) {
+      const bodyNode =
+        typeof targetFunction.getBody === 'function'
+          ? targetFunction.getBody()
+          : null;
+      const bodyKind =
+        bodyNode && typeof bodyNode.getKind === 'function'
+          ? bodyNode.getKind()
+          : null;
+      if (bodyKind !== SyntaxKind.Block) {
+        void vscode.window.showInformationMessage(
+          'Objectify Params: Object Variable requires the function to use a block body (wrap arrow functions in braces).'
+        );
+        return;
+      }
+    }
+
     // Resolve target symbol
     const { resolvedTarget, canProceedWithoutSymbol } = parse.resolveSymbol(
       project,
@@ -243,10 +273,33 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     let fuzzy = callCollection.fuzzy;
     const alreadyConvertedCount = callCollection.alreadyConvertedCount || 0;
 
-    // Get show previews setting early as it's used in multiple places
-    const cfg = vscode.workspace.getConfiguration('objectifyParams');
-    const showPreviews = cfg.get('showPreviews') as boolean;
-    const highlightDelay = (cfg.get('highlightDelay') as number) ?? 1000;
+    const transformOptions = {
+      objectVariableName,
+      preserveTypes,
+    };
+
+    const applyFunctionTransform = (
+      sourceFnText: string,
+      paramTypeText: string
+    ): string => {
+      const transformed = text.transformFunctionText(
+        sourceFnText,
+        params,
+        paramNames,
+        paramTypeText,
+        isTypeScriptFile,
+        isRestParameter,
+        transformOptions
+      );
+      if (objectVariableName) {
+        return text.insertObjectVariableDestructureLine(
+          transformed.text,
+          transformed.destructuredParams,
+          objectVariableName
+        );
+      }
+      return transformed.text;
+    };
 
     if (confirmed.length === 0 && fuzzy.length === 0) {
       // Check if we found calls but they were all already converted
@@ -259,9 +312,6 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
       log('No calls found, converting function signature only');
 
-      const isTypeScript =
-        sourceFile.getFilePath().endsWith('.ts') ||
-        sourceFile.getFilePath().endsWith('.tsx');
       const paramTypeText = parse.extractParameterTypes(
         params,
         paramNames,
@@ -270,13 +320,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         restTupleElements
       );
 
-      const newFnText = text.transformFunctionText(
+      const newFnText = applyFunctionTransform(
         originalFunctionText,
-        params,
-        paramNames,
-        paramTypeText,
-        isTypeScript,
-        isRestParameter
+        paramTypeText
       );
 
       let aborted = false;
@@ -336,9 +382,6 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         isRestParameter,
         restTupleElements
       );
-      const isTypeScript =
-        sourceFile.getFilePath().endsWith('.ts') ||
-        sourceFile.getFilePath().endsWith('.tsx');
       const buildReplacement = (
         exprText: string,
         argsTextArr: string[] | null
@@ -362,13 +405,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         targetStart,
         buildReplacement
       );
-      const convertedFunctionText = text.transformFunctionText(
+      const convertedFunctionText = applyFunctionTransform(
         functionTextWithInternal,
-        params,
-        paramNames,
-        paramTypeText,
-        isTypeScript,
-        isRestParameter
+        paramTypeText
       );
 
       let aborted = false;
@@ -527,9 +566,6 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     // Show function conversion dialog if previews are enabled
     if (showPreviews && (confirmed.length > 0 || fuzzy.length > 0)) {
       // Build the converted function text for preview
-      const isTypeScript =
-        sourceFile.getFilePath().endsWith('.ts') ||
-        sourceFile.getFilePath().endsWith('.tsx');
       const paramTypeText = parse.extractParameterTypes(
         params,
         paramNames,
@@ -537,13 +573,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         isRestParameter,
         restTupleElements
       );
-      const newFnText = text.transformFunctionText(
+      const newFnText = applyFunctionTransform(
         originalFunctionText,
-        params,
-        paramNames,
-        paramTypeText,
-        isTypeScript,
-        isRestParameter
+        paramTypeText
       );
 
       aborted = await dialogs.showFunctionConversionDialog(
@@ -684,16 +716,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         isRestParameter,
         restTupleElements
       );
-      const isTypeScript =
-        sourceFile.getFilePath().endsWith('.ts') ||
-        sourceFile.getFilePath().endsWith('.tsx');
-      const newFnText = text.transformFunctionText(
+      const newFnText = applyFunctionTransform(
         originalFunctionText,
-        params,
-        paramNames,
-        paramTypeText,
-        isTypeScript,
-        isRestParameter
+        paramTypeText
       );
 
       const edit = new vscode.WorkspaceEdit();
@@ -736,16 +761,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       isRestParameter,
       restTupleElements
     );
-    const isTypeScript2 =
-      sourceFile.getFilePath().endsWith('.ts') ||
-      sourceFile.getFilePath().endsWith('.tsx');
-    const newFnText2 = text.transformFunctionText(
+    const newFnText2 = applyFunctionTransform(
       originalFunctionText,
-      params,
-      paramNames,
-      paramTypeText2,
-      isTypeScript2,
-      isRestParameter
+      paramTypeText2
     );
     
     // Add function signature edit to the WorkspaceEdit
