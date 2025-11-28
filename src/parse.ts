@@ -497,19 +497,7 @@ export async function collectCalls(
         exprText.endsWith('[' + fnName + ']');
       if (!looksLikeCall) continue;
 
-      if (hasConflictingLocalDefinition(sf)) {
-        await dialogs.showNameCollisionDialog(
-          {
-            filePath: sf.getFilePath(),
-            start: call.getStart(),
-            end: call.getEnd(),
-          },
-          originalEditor,
-          originalSelection
-        );
-        return { confirmed: [], fuzzy: [], shouldAbort: true };
-      }
-
+      const localConflict = hasConflictingLocalDefinition(sf);
       const callKind = expr.getKind && expr.getKind();
       const isIndirectAccess =
         callKind === SyntaxKind.PropertyAccessExpression ||
@@ -775,56 +763,17 @@ export async function collectCalls(
         // it's likely a different function with the same name - treat as fuzzy
         const isPropertyAccess = exprText !== fnName && (exprText.includes('.') || exprText.includes('['));
 
-        if (
-          resolvedTarget &&
-          fnName &&
-          !isPropertyAccess &&
-          sf.getFilePath() &&
-          sf.getFilePath() !== sourceFilePath
-        ) {
-          const hasLocalFunctionDefinition = (() => {
-            try {
-              const funcDecls = sf.getFunctions();
-              if (
-                funcDecls.some(
-                  (f: any) =>
-                    typeof f.getName === 'function' && f.getName() === fnName
-                )
-              ) {
-                return true;
-              }
-              const varDecls = sf.getVariableDeclarations();
-              return varDecls.some((v: any) => {
-                if (typeof v.getName !== 'function' || v.getName() !== fnName) {
-                  return false;
-                }
-                const init = v.getInitializer && v.getInitializer();
-                if (!init || typeof init.getKind !== 'function') {
-                  return false;
-                }
-                const kind = init.getKind();
-                return (
-                  kind === SyntaxKind.FunctionExpression ||
-                  kind === SyntaxKind.ArrowFunction
-                );
-              });
-            } catch (e) {
-              return false;
-            }
-          })();
-
-          if (hasLocalFunctionDefinition) {
-            await dialogs.showNameCollisionDialog(
-              {
-                filePath: sf.getFilePath(),
-                start: call.getStart(),
-                end: call.getEnd(),
-              },
-              originalEditor,
-              originalSelection
-            );
-            return { confirmed: [], fuzzy: [], shouldAbort: true };
-          }
+        if (localConflict && !isPropertyAccess) {
+          await dialogs.showNameCollisionDialog(
+            {
+              filePath: sf.getFilePath(),
+              start: call.getStart(),
+              end: call.getEnd(),
+            },
+            originalEditor,
+            originalSelection
+          );
+          return { confirmed: [], fuzzy: [], shouldAbort: true };
         }
         
         if (isPropertyAccess) {
