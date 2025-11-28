@@ -86,6 +86,75 @@ function applyInternalCallReplacements(
   return updated;
 }
 
+function detectObjectVariableDestructure(targetFunction: any): boolean {
+  try {
+    const params = targetFunction.getParameters
+      ? targetFunction.getParameters()
+      : [];
+    if (!params || params.length !== 1) {
+      return false;
+    }
+    const paramName = params[0].getName ? params[0].getName() : null;
+    if (!paramName) {
+      return false;
+    }
+    const isParamDestructured = (() => {
+      try {
+        const text = params[0].getText();
+        return text.trim().startsWith('{');
+      } catch {
+        return false;
+      }
+    })();
+    if (isParamDestructured) {
+      return false;
+    }
+    const body = targetFunction.getBody ? targetFunction.getBody() : null;
+    if (!body || typeof body.getStatements !== 'function') {
+      return false;
+    }
+    const statements = body.getStatements();
+    for (const stmt of statements) {
+      if (!stmt || typeof stmt.getKind !== 'function') {
+        continue;
+      }
+      if (stmt.getKind() !== SyntaxKind.VariableStatement) {
+        continue;
+      }
+      const declarationList =
+        typeof stmt.getDeclarationList === 'function'
+          ? stmt.getDeclarationList()
+          : null;
+      if (!declarationList || typeof declarationList.getDeclarations !== 'function') {
+        continue;
+      }
+      const declarations = declarationList.getDeclarations();
+      if (!declarations || !declarations.length) {
+        continue;
+      }
+      const decl = declarations[0];
+      const nameNode = decl.getNameNode ? decl.getNameNode() : null;
+      if (!nameNode || typeof nameNode.getKind !== 'function') {
+        continue;
+      }
+      if (nameNode.getKind() !== SyntaxKind.ObjectBindingPattern) {
+        continue;
+      }
+      const initializer = decl.getInitializer ? decl.getInitializer() : null;
+      const initializerText = initializer?.getText?.().trim();
+      if (!initializerText) {
+        continue;
+      }
+      if (initializerText === paramName) {
+        return true;
+      }
+    }
+  } catch (err) {
+    log('detectObjectVariableDestructure error', err);
+  }
+  return false;
+}
+
 export async function convertCommandHandler(...args: any[]): Promise<void> {
   const context = utils.getWorkspaceContext();
   if (!context) return;
@@ -207,9 +276,13 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
         }
       })();
 
-    if (hasObjectDestructuring) {
+    const hasObjectVariableDestructure = detectObjectVariableDestructure(
+      targetFunction
+    );
+
+    if (hasObjectDestructuring || hasObjectVariableDestructure) {
       void vscode.window.showInformationMessage(
-        'Objectify Params: This function already uses object destructuring parameters.'
+        'Objectify Params: This function already uses object parameter destructuring.'
       );
       return;
     }
