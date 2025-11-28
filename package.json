@@ -20,7 +20,7 @@
     "commands": [
       {
         "command": "objectifyParams.convert",
-        "title": "Objectify Parameters"
+        "title": "Objectify Params"
       }
     ],
     "menus": {
@@ -34,7 +34,7 @@
     },
     "configuration": {
       "type": "object",
-      "title": "Objectify Parameters",
+      "title": "Objectify Params",
       "properties": {
         "objectifyParams.include": {
           "type": "string",
@@ -61,7 +61,7 @@
         "objectifyParams.objectVariable": {
           "type": "string",
           "default": "$par$",
-          "markdownDescription": "Optional variable name to receive the incoming params object. When set, the signature keeps this variable (no destructuring) and the body receives a `let { ... } = $par$;` statement inserted on the first line. When blank, destructuring is used directly in the signature."
+          "description": "Optional variable name to receive the incoming params object. When set, the signature keeps this variable (no destructuring) and the body receives a `let { ... } = $par$;` statement inserted on the first line. When blank, destructuring is used directly in the signature."
         },
         "objectifyParams.preserveTypes": {
           "type": "boolean",
