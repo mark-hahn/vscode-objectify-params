@@ -236,9 +236,10 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       functionResult;
 
     const cfg = vscode.workspace.getConfiguration('objectifyParams');
-    const showPreviews = cfg.get('showPreviews') as boolean;
-    const highlightDelay = (cfg.get('highlightDelay') as number) ?? 1000;
-    const objectVariableSetting = (cfg.get('objectVariable') as string) || '';
+    const showPreviews = cfg.get('1.showPreviews') as boolean;
+    const highlightDelay = (cfg.get('2.highlightDelay') as number) ?? 1000;
+    const objectVariableSetting =
+      (cfg.get('3.objectVariable') as string) || '';
     const objectVariableName = objectVariableSetting.trim();
     const identifierRegex = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
     if (objectVariableName && !identifierRegex.test(objectVariableName)) {
@@ -247,7 +248,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       );
       return;
     }
-    const preserveTypesSetting = cfg.get('preserveTypes');
+    const preserveTypesSetting = cfg.get('4.preserveTypes');
     const preserveTypes =
       typeof preserveTypesSetting === 'boolean' ? preserveTypesSetting : true;
 

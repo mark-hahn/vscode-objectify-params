@@ -49,8 +49,10 @@ export function isFileIncludedByConfig(
   workspaceRoot: string
 ): { included: boolean; includeGlobs: string; excludeGlobs: string } {
   const cfg = vscode.workspace.getConfiguration('objectifyParams');
-  const includeGlobs = (cfg.get('include') as string) || '**/*.ts **/*.js';
-  const excludeGlobs = (cfg.get('exclude') as string) || '**/node_modules/**';
+  const includeGlobs =
+    (cfg.get('6.include') as string) || '**/*.ts **/*.js';
+  const excludeGlobs =
+    (cfg.get('5.exclude') as string) || '**/node_modules/**';
   const includePatterns = includeGlobs.split(/\s+/).filter(Boolean);
   const excludePatterns = excludeGlobs.split(/\s+/).filter(Boolean);
 

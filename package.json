@@ -36,37 +36,37 @@
       "type": "object",
       "title": "Objectify Params",
       "properties": {
-        "objectifyParams.include": {
-          "type": "string",
-          "default": "**/*.ts **/*.js",
-          "description": "Space-separated glob patterns of files to include when scanning (use common glob format)."
-        },
-        "objectifyParams.exclude": {
-          "type": "string",
-          "default": "**/node_modules/**",
-          "description": "Space-separated glob patterns of files/folders to exclude when scanning."
-        },
-        "objectifyParams.showPreviews": {
+        "objectifyParams.1.showPreviews": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Show a preview dialog for every call conversion, including confirmed valid calls."
         },
-        "objectifyParams.highlightDelay": {
+        "objectifyParams.2.highlightDelay": {
           "type": "number",
-          "default": 500,
+          "default": 1000,
           "minimum": 0,
           "maximum": 5000,
           "description": "Time in milliseconds to show preview highlighting. Zero means no preview."
         },
-        "objectifyParams.objectVariable": {
+        "objectifyParams.3.objectVariable": {
           "type": "string",
           "default": "$par$",
           "description": "Optional variable name to receive the incoming params object. When set, the signature keeps this variable (no destructuring) and the body receives a `let { ... } = $par$;` statement inserted on the first line. When blank, destructuring is used directly in the signature."
         },
-        "objectifyParams.preserveTypes": {
+        "objectifyParams.4.preserveTypes": {
           "type": "boolean",
           "default": true,
           "description": "When false, replace the generated object parameter types with `any`, discarding the extracted TypeScript types."
+        },
+        "objectifyParams.5.exclude": {
+          "type": "string",
+          "default": "**/node_modules/**",
+          "description": "Space-separated glob patterns of files/folders to exclude when scanning (use common glob format). Exclude has higher priority than include."
+        },
+        "objectifyParams.6.include": {
+          "type": "string",
+          "default": "**/*.ts **/*.js",
+          "description": "Space-separated glob patterns of files/folders to include when scanning."
         }
       }
     }

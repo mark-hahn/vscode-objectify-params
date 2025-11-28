@@ -186,8 +186,10 @@ export async function createProjectFromConfig(
 
   // Read include/exclude globs from configuration (space-separated strings)
   const cfg = vscode.workspace.getConfiguration('objectifyParams');
-  const includeStr = (cfg.get('include') as string) || '**/*.ts **/*.js';
-  const excludeStr = (cfg.get('exclude') as string) || '**/node_modules/**';
+  const includeStr =
+    (cfg.get('6.include') as string) || '**/*.ts **/*.js';
+  const excludeStr =
+    (cfg.get('5.exclude') as string) || '**/node_modules/**';
   const includePatterns = includeStr.split(/\s+/).filter(Boolean);
   const excludePatterns = excludeStr.split(/\s+/).filter(Boolean);
 
@@ -855,7 +857,8 @@ export async function collectCalls(
 
   // Also search .vue and .svelte files in workspace for template calls
   const cfg = vscode.workspace.getConfiguration('objectifyParams');
-  const excludeStr = (cfg.get('exclude') as string) || '**/node_modules/**';
+  const excludeStr =
+    (cfg.get('5.exclude') as string) || '**/node_modules/**';
   const excludePatterns = excludeStr.split(/\s+/).filter(Boolean);
   const templatePatterns = ['**/*.vue', '**/*.svelte'];
   let vueFilesRel: string[] = [];
