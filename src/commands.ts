@@ -45,6 +45,29 @@ function splitInternalCalls(
   return { internal, external };
 }
 
+function isLexicallyNestedFunction(targetFunction: any): boolean {
+  if (!targetFunction || typeof targetFunction.getParent !== 'function') {
+    return false;
+  }
+  let parent = targetFunction.getParent();
+  while (parent) {
+    const kind = typeof parent.getKind === 'function' ? parent.getKind() : null;
+    if (
+      kind === SyntaxKind.FunctionDeclaration ||
+      kind === SyntaxKind.FunctionExpression ||
+      kind === SyntaxKind.ArrowFunction ||
+      kind === SyntaxKind.MethodDeclaration ||
+      kind === SyntaxKind.GetAccessor ||
+      kind === SyntaxKind.SetAccessor ||
+      kind === SyntaxKind.Constructor
+    ) {
+      return true;
+    }
+    parent = typeof parent.getParent === 'function' ? parent.getParent() : null;
+  }
+  return false;
+}
+
 function applyInternalCallReplacements(
   originalFnText: string,
   internalCalls: any[],
@@ -256,6 +279,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
     const targetStart = targetFunction.getStart();
     const targetEnd = targetFunction.getEnd();
     const originalFunctionText = targetFunction.getText();
+    const isTargetFunctionNested = isLexicallyNestedFunction(targetFunction);
 
     let highlightStart = targetStart;
     if (targetVariableDeclaration) {
@@ -341,7 +365,9 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
       originalEditor,
       originalSelection,
       filePath,
-      targetFunction.getStart(),
+      targetStart,
+      targetEnd,
+      isTargetFunctionNested,
       targetVariableDeclaration
         ? targetVariableDeclaration.getStart()
         : undefined

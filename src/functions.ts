@@ -149,6 +149,12 @@ export function findTargetFunction(
     considerFunction(method);
   }
 
+  // Check class constructors explicitly — they aren't returned by getFunctions/getMethods
+  const constructors = sourceFile.getDescendantsOfKind(SyntaxKind.Constructor);
+  for (const ctor of constructors) {
+    considerFunction(ctor);
+  }
+
   if (!targetFunction) {
     void vscode.window.showInformationMessage(
       'Objectify Params: Not on a function.'
@@ -166,6 +172,17 @@ export function findTargetFunction(
 
   // Get function name
   let fnName = targetFunction.getName ? targetFunction.getName() : null;
+
+  // Constructors report no name; use the enclosing class name instead
+  if (!fnName) {
+    const kind = targetFunction.getKind?.();
+    if (kind === SyntaxKind.Constructor) {
+      const cls = targetFunction.getParent?.();
+      if (cls && typeof cls.getName === 'function') {
+        fnName = cls.getName();
+      }
+    }
+  }
 
   // If arrow function or function expression assigned to variable, get name from variable
   if (!fnName && targetVariableDeclaration) {

@@ -45,7 +45,6 @@ function hasVueScriptDefinition(
   ];
   return patterns.some((re) => re.test(content));
 }
-
 export interface SymbolResolution {
   resolvedTarget: any;
   canProceedWithoutSymbol: boolean;
@@ -283,6 +282,8 @@ export async function collectCalls(
   originalSelection: vscode.Selection,
   sourceFilePath: string,
   targetFunctionStart: number,
+  targetFunctionEnd: number,
+  isTargetFunctionNested: boolean,
   targetVariableStart?: number
 ): Promise<CollectedCalls> {
   const normalizeFsPath = (p?: string): string | undefined => {
@@ -295,6 +296,10 @@ export async function collectCalls(
   const confirmed: CallCandidate[] = [];
   let fuzzy: CallCandidate[] = [];
   let alreadyConvertedCount = 0;
+  const restrictToLexicalScope =
+    isTargetFunctionNested &&
+    typeof targetFunctionStart === 'number' &&
+    typeof targetFunctionEnd === 'number';
 
   const files = project.getSourceFiles();
   log(
@@ -417,13 +422,41 @@ export async function collectCalls(
     const sfPath = sf.getFilePath && sf.getFilePath();
     if (sfPath && sfPath.indexOf(path.sep + 'node_modules' + path.sep) >= 0)
       continue;
+    const sfNormalized = normalizeFsPath(sfPath);
+    const isSameSourceFile =
+      sfNormalized && sourceFileNormalized && sfNormalized === sourceFileNormalized;
 
-    const calls = sf.getDescendantsOfKind(SyntaxKind.CallExpression);
+    const callExpressions = sf
+      .getDescendantsOfKind(SyntaxKind.CallExpression)
+      .map((node: any) => ({ node, isNewExpression: false }));
+    const newExpressions = sf
+      .getDescendantsOfKind(SyntaxKind.NewExpression)
+      .map((node: any) => ({ node, isNewExpression: true }));
+    const calls = [...callExpressions, ...newExpressions];
 
-    for (const call of calls) {
+    for (const callEntry of calls) {
+      const call = callEntry.node;
       const expr = call.getExpression();
       if (!expr) continue;
       const exprText = expr.getText();
+      const exprTextForReplacement = callEntry.isNewExpression
+        ? `new ${exprText}`
+        : exprText;
+      const callStart = call.getStart();
+      if (
+        restrictToLexicalScope &&
+        isSameSourceFile &&
+        typeof callStart === 'number' &&
+        (callStart < targetFunctionStart || callStart > targetFunctionEnd)
+      ) {
+        log(
+          'Skipping call outside nested scope:',
+          sf.getFilePath(),
+          'offset',
+          callStart
+        );
+        continue;
+      }
 
       // Check for .call(), .apply(), .bind() - these have PropertyAccessExpression
       if (
@@ -510,7 +543,7 @@ export async function collectCalls(
           filePath: sf.getFilePath(),
           start: call.getStart(),
           end: call.getEnd(),
-          exprText: expr.getText(),
+          exprText: exprTextForReplacement,
           argsText,
           reason: 'indirect-access-unresolved',
           score: 2,
@@ -677,11 +710,11 @@ export async function collectCalls(
                 'params in',
                 sf.getFilePath()
               );
-              fuzzy.push({
+               fuzzy.push({
                 filePath: sf.getFilePath(),
                 start: call.getStart(),
                 end: call.getEnd(),
-                exprText: expr.getText(),
+                 exprText: exprTextForReplacement,
                 argsText,
                 reason: 'too-many-args',
                 score: 3,
@@ -693,7 +726,7 @@ export async function collectCalls(
                 filePath: sf.getFilePath(),
                 start: call.getStart(),
                 end: call.getEnd(),
-                exprText: expr.getText(),
+                exprText: exprTextForReplacement,
                 argsText,
               });
             }
@@ -782,7 +815,7 @@ export async function collectCalls(
             filePath: sf.getFilePath(),
             start: call.getStart(),
             end: call.getEnd(),
-            exprText: expr.getText(),
+            exprText: exprTextForReplacement,
             argsText,
             reason: 'unresolved-property-access',
             score: 2,
@@ -793,7 +826,7 @@ export async function collectCalls(
             filePath: sf.getFilePath(),
             start: call.getStart(),
             end: call.getEnd(),
-            exprText: expr.getText(),
+            exprText: exprTextForReplacement,
             argsText,
             reason: 'unresolved-too-many-args',
             score: 3,
@@ -804,7 +837,7 @@ export async function collectCalls(
             file: sf.getFilePath(),
             start: call.getStart(),
             end: call.getEnd(),
-            exprText: expr.getText(),
+            exprText: exprTextForReplacement,
             argsText,
             callText: call.getText()
           });
@@ -812,7 +845,7 @@ export async function collectCalls(
             filePath: sf.getFilePath(),
             start: call.getStart(),
             end: call.getEnd(),
-            exprText: expr.getText(),
+            exprText: exprTextForReplacement,
             argsText,
           });
         }
