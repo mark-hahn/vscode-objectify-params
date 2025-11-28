@@ -63,6 +63,7 @@
   },
   "dependencies": {
     "glob": "^13.0.0",
+    "minimatch": "^5.1.6",
     "ts-morph": "^18.0.0"
   },
   "devDependencies": {

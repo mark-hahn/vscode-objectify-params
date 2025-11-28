@@ -91,6 +91,20 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
   if (!context) return;
 
   const { editor, workspaceRoot, filePath } = context;
+  const workspaceRelative = vscode.workspace.asRelativePath(filePath, false);
+
+  const includeInfo = utils.isFileIncludedByConfig(filePath, workspaceRoot);
+
+  const showNotIncludedMessage = (): void => {
+    void vscode.window.showInformationMessage(
+      `Objectify Params: File "${workspaceRelative}" not included in configured patterns. include=${includeInfo.includeGlobs} exclude=${includeInfo.excludeGlobs}`
+    );
+  };
+
+  if (!includeInfo.included) {
+    showNotIncludedMessage();
+    return;
+  }
 
   const originalEditor = vscode.window.activeTextEditor;
   const originalSelection = originalEditor
@@ -127,13 +141,7 @@ export async function convertCommandHandler(...args: any[]): Promise<void> {
 
     // If file wasn't in the project, warn the user
     if (wasNotInProject) {
-      const cfg = vscode.workspace.getConfiguration('objectifyParams');
-      const includeGlobs = (cfg.get('include') as string) || '**/*.ts **/*.js';
-      const excludeGlobs = (cfg.get('exclude') as string) || '**/node_modules/**';
-      const workspaceRelative = vscode.workspace.asRelativePath(filePath, false);
-      void vscode.window.showInformationMessage(
-        `Objectify Params: File "${workspaceRelative}" not included in configured patterns. include=${includeGlobs} exclude=${excludeGlobs}`
-      );
+      showNotIncludedMessage();
       return;
     }
 

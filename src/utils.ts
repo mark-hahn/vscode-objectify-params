@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import { Minimatch } from 'minimatch';
 
 const outputChannel = vscode.window.createOutputChannel('Objectify Params');
 
@@ -7,6 +9,11 @@ export interface WorkspaceContext {
   workspaceRoot: string;
   filePath: string;
 }
+
+const minimatchOptions = {
+  dot: true,
+  nocase: process.platform === 'win32',
+};
 
 export function getWorkspaceContext(): WorkspaceContext | null {
   const editor = vscode.window.activeTextEditor;
@@ -30,6 +37,72 @@ export function getWorkspaceContext(): WorkspaceContext | null {
     : workspaceFolders[0].uri.fsPath;
 
   return { editor, workspaceRoot, filePath };
+}
+
+function toGlobPath(p?: string): string | undefined {
+  if (!p) return undefined;
+  return p.replace(/\\/g, '/');
+}
+
+export function isFileIncludedByConfig(
+  filePath: string,
+  workspaceRoot: string
+): { included: boolean; includeGlobs: string; excludeGlobs: string } {
+  const cfg = vscode.workspace.getConfiguration('objectifyParams');
+  const includeGlobs = (cfg.get('include') as string) || '**/*.ts **/*.js';
+  const excludeGlobs = (cfg.get('exclude') as string) || '**/node_modules/**';
+  const includePatterns = includeGlobs.split(/\s+/).filter(Boolean);
+  const excludePatterns = excludeGlobs.split(/\s+/).filter(Boolean);
+
+  const result = {
+    included: false,
+    includeGlobs,
+    excludeGlobs,
+  };
+
+  if (!includePatterns.length) {
+    return result;
+  }
+
+  const candidates: string[] = [];
+  const absoluteCandidate = toGlobPath(path.resolve(filePath));
+  if (absoluteCandidate) {
+    candidates.push(absoluteCandidate);
+  }
+
+  const relativePath = path.relative(workspaceRoot, filePath);
+  if (relativePath && !relativePath.startsWith('..')) {
+    const relCandidate = toGlobPath(relativePath);
+    if (relCandidate) {
+      candidates.push(relCandidate);
+    }
+  }
+
+  if (!candidates.length) {
+    return result;
+  }
+
+  const matchesInclude = includePatterns.some((pattern) => {
+    const matcher = new Minimatch(pattern, minimatchOptions);
+    return candidates.some((candidate) => matcher.match(candidate));
+  });
+
+  if (!matchesInclude) {
+    return result;
+  }
+
+  const matchesExclude = excludePatterns.length
+    ? excludePatterns.some((pattern) => {
+        const matcher = new Minimatch(pattern, minimatchOptions);
+        return candidates.some((candidate) => matcher.match(candidate));
+      })
+    : false;
+
+  return {
+    included: !matchesExclude,
+    includeGlobs,
+    excludeGlobs,
+  };
 }
 
 export function getLog(module: string): {
