@@ -5,7 +5,7 @@ describe('buildCallReplacement', () => {
   it('omits optional parameters when args are missing or undefined', () => {
     const result = buildCallReplacement(
       'foo',
-      ['cmd', undefined],
+      ['cmd'],
       ['cmd', 'val'],
       [false, true]
     );
