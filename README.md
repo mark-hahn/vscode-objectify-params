@@ -1,5 +1,7 @@
 ## Objectify Params
 
+[![Tests](https://github.com/mark-hahn/vscode-objectify-params/actions/workflows/tests.yml/badge.svg)](https://github.com/mark-hahn/vscode-objectify-params/actions/workflows/tests.yml)
+
 Automatically refactor JavaScript or TypeScript functions to use object parameters instead of multiple positional parameters, improving readability and maintainability.
 
 ### Features
