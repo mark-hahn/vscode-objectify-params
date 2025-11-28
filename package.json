@@ -79,17 +79,23 @@
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@types/glob": "^7.2.0",
-    "@types/node": "^14.18.0",
+    "@types/node": "^18.19.0",
     "@types/vscode": "^1.50.0",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
     "@typescript-eslint/parser": "^5.0.0",
     "eslint": "^8.50.0",
-    "typescript": "^4.9.5"
+    "happy-dom": "^12.10.3",
+    "typescript": "^4.9.5",
+    "vitest": "^1.2.2",
+    "c8": "^9.1.0"
   },
   "scripts": {
     "vscode:prepublish": "echo prepublish",
     "compile": "tsc -p tsconfig.json",
     "watch": "tsc -w",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "c8 --reporter=text --reporter=html vitest run"
   }
 }
