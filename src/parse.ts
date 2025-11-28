@@ -650,25 +650,13 @@ export async function collectCalls(
             const isCollision = !isMatch;
 
             if (isCollision) {
-              const collisionCandidate = {
-                filePath: sf.getFilePath(),
+              log('Skipping call to different symbol (resolved mismatch):', {
+                file: sf.getFilePath(),
                 start: call.getStart(),
                 end: call.getEnd(),
-              };
-
-              log('Name collision detected while scanning calls:', {
-                file: collisionCandidate.filePath,
-                start: collisionCandidate.start,
-                end: collisionCandidate.end,
                 expr: expr.getText(),
               });
-
-              await dialogs.showNameCollisionDialog(
-                collisionCandidate,
-                originalEditor,
-                originalSelection
-              );
-              return { confirmed: [], fuzzy: [], shouldAbort: true };
+              continue;
             }
           }
 
