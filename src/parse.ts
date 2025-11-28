@@ -286,7 +286,8 @@ export async function collectCalls(
   targetFunctionStart: number,
   targetFunctionEnd: number,
   isTargetFunctionNested: boolean,
-  targetVariableStart?: number
+  targetVariableStart?: number,
+  targetIsConstructor = false
 ): Promise<CollectedCalls> {
   const normalizeFsPath = (p?: string): string | undefined => {
     if (!p) return undefined;
@@ -437,6 +438,9 @@ export async function collectCalls(
     const calls = [...callExpressions, ...newExpressions];
 
     for (const callEntry of calls) {
+      if (targetIsConstructor && !callEntry.isNewExpression) {
+        continue;
+      }
       const call = callEntry.node;
       const expr = call.getExpression();
       if (!expr) continue;
