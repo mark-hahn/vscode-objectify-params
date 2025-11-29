@@ -61,12 +61,12 @@
         "objectifyParams.5.exclude": {
           "type": "string",
           "default": "**/node_modules/**",
-          "description": "Space-separated glob patterns of files/folders to exclude when scanning (use common glob format). Exclude has higher priority than include."
+          "description": "Space-separated glob patterns of files/folders to exclude (use common glob format). Exclude has higher priority than include."
         },
         "objectifyParams.6.include": {
           "type": "string",
           "default": "**/*.ts **/*.js",
-          "description": "Space-separated glob patterns of files/folders to include when scanning."
+          "description": "Space-separated glob patterns of files/folders to include."
         }
       }
     }
