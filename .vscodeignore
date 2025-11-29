@@ -1,0 +1,23 @@
+# Exclude build and tooling artifacts from the VSIX
+node_modules
+.vscode/
+.vscode-test/
+dist/
+coverage/
+.git/
+.gitignore
+**/*.map
+**/*.log
+**/*.tsbuildinfo
+
+# Miscellaneous project notes and test fixtures
+misc/
+testfiles/
+wvharness/
+notes/
+README-drafts/
+todo.txt
+
+# Local editor/OS cruft
+.DS_Store
+Thumbs.db

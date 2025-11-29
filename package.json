@@ -3,7 +3,7 @@
   "displayName": "Objectify Params",
   "description": "VS Code extension to convert function parameters into objects.",
   "version": "0.1.0",
-  "publisher": "eridien",
+  "publisher": "mark-hahn",
   "icon": "images/icon.png",
   "repository": {
     "type": "git",
