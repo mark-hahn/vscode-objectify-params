@@ -2,7 +2,7 @@
   "name": "objectify-params",
   "displayName": "Objectify Params",
   "description": "VS Code extension to convert function parameters into objects.",
-  "version": "0.1.0",
+  "version": "0.0.2",
   "publisher": "mark-hahn",
   "icon": "images/icon.png",
   "repository": {

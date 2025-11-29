@@ -1,5 +1,4 @@
 # Exclude build and tooling artifacts from the VSIX
-node_modules
 .vscode/
 .vscode-test/
 dist/
