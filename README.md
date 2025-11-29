@@ -80,6 +80,73 @@ Access settings via **File > Preferences > Settings** and search for "Objectify 
 - **Default**: `"**/*.ts **/*.js"`
 - Space-separated glob patterns of files to scan
 
+### Sample Setting Combinations
+
+These demonstrate how `objectVariable` (inline vs `$par$`) and `preserveTypes` (original types vs `any`) change the generated code. All examples start from the same simple function:
+
+```ts
+function welcome(name: string, age = 21) {
+  console.log(name, age);
+}
+
+welcome("Ava", 33);
+welcome("Ben");
+```
+
+#### 1. `objectVariable: "$par$"` (default), `preserveTypes: true`
+
+- Signature keeps `$par$` and the body destructures on the first line while preserving full TypeScript types.
+
+```ts
+function welcome($par$: { name: string; age?: number }) {
+  let { name, age = 21 } = $par$;
+  console.log(name, age);
+}
+
+welcome({ name: "Ava", age: 33 });
+welcome({ name: "Ben" });
+```
+
+#### 2. `objectVariable: ""`, `preserveTypes: true`
+
+- Parameters destructure inline in the signature, still keeping the extracted types.
+
+```ts
+function welcome({ name, age = 21 }: { name: string; age?: number }) {
+  console.log(name, age);
+}
+
+welcome({ name: "Ava", age: 33 });
+welcome({ name: "Ben" });
+```
+
+#### 3. `objectVariable: "$par$"`, `preserveTypes: false`
+
+- Keeps `$par$` but drops explicit property types, replacing the object annotation with `any` for quicker editing.
+
+```ts
+function welcome($par$: any) {
+  let { name, age = 21 } = $par$;
+  console.log(name, age);
+}
+
+welcome({ name: "Ava", age: 33 });
+welcome({ name: "Ben" });
+```
+
+#### 4. `objectVariable: ""`, `preserveTypes: false`
+
+- Inline destructuring combined with a simple `any` annotation on the entire parameter.
+
+```ts
+function welcome({ name, age = 21 }: any) {
+  console.log(name, age);
+}
+
+welcome({ name: "Ava", age: 33 });
+welcome({ name: "Ben" });
+```
+
 ### How It Works
 
 1. **Scanning**: Searches your workspace for all references to the function

@@ -2,7 +2,7 @@
 
 All notable changes to the "Objectify Params" extension will be documented in this file.
 
-## [0.1.0] - 2025-11-28
+## [0.0.3] - 2025-11-28
 
 ### Initial Release
 - Convert function parameters to object destructuring syntax
